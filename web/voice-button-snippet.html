@@ -1,0 +1,22 @@
+<!--
+  BOOKING OS — "Talk to our AI Receptionist" website button (Vapi web widget)
+  Paste before </body> on the client's website. Uses the Vapi PUBLIC key only (safe in the browser).
+  Source: https://docs.vapi.ai/chat/web-widget
+
+  IMPORTANT for the current Dental Netlify site: its netlify.toml blocks this today.
+    - Permissions-Policy has "microphone=()"  -> change to "microphone=(self)"
+    - Content-Security-Policy only allows 'self' -> allow the Vapi widget script and its call servers, e.g.
+        script-src  'self' https://unpkg.com;
+        connect-src 'self' https://api.vapi.ai https://*.daily.co wss://*.daily.co;
+        frame-src   https://*.daily.co;  media-src 'self' blob: https://*.daily.co;
+      (Vapi web calls run on Daily WebRTC. Confirm the exact list in the browser console on first test
+       and add anything it reports as blocked.)
+-->
+<script src="https://unpkg.com/@vapi-ai/client-sdk-react/dist/embed/widget.umd.js" async type="text/javascript"></script>
+
+<vapi-widget
+  public-key="YOUR_VAPI_PUBLIC_KEY"
+  assistant-id="YOUR_VAPI_ASSISTANT_ID"
+  mode="voice"
+  theme="light"
+></vapi-widget>

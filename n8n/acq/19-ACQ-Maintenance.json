@@ -1,0 +1,75 @@
+{
+  "name": "ACQ · Maintenance (daily)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 3,
+              "triggerAtMinute": 17
+            }
+          ]
+        }
+      },
+      "id": "1125ecbe-6c6c-587a-bd43-eacf2337bd5f",
+      "name": "Daily 03:17",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select acq.maintenance() as r;",
+        "options": {
+          "queryBatching": "independently"
+        }
+      },
+      "id": "1f0e1906-81bd-5d29-893a-8ef6e058fa91",
+      "name": "Run Maintenance",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        260,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily 03:17": {
+      "main": [
+        [
+          {
+            "node": "Run Maintenance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

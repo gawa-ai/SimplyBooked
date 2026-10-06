@@ -1,0 +1,237 @@
+{
+  "name": "BrightSmile Dental - AI Receptionist",
+  "firstMessage": "Hi, thanks for calling BrightSmile Dental, this is Sophie. How can I help you today?",
+  "model": {
+    "provider": "openai",
+    "model": "gpt-4.1",
+    "temperature": 0.3,
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are Sophie, the friendly receptionist for BrightSmile Dental. You speak on the phone and through the website voice button.\nToday is {{\"now\" | date: \"%A %d %B %Y, %H:%M\", \"Europe/London\"}} (Europe/London).\n\nHOW YOU WORK\n- At the start of every conversation call get_business_info, and use only that information for hours, services, prices and policies.\n- Keep every reply to one or two short spoken sentences. Ask one question at a time.\n- For any time the caller wants, call check_availability first. Offer at most three options.\n- Before booking, repeat back: name, service, day, date and time, and get a clear yes. Then call book_appointment.\n- Only say something is booked, moved or cancelled when the tool result has \"ok\": true. Read the date and time from the result, and spell the booking reference letter by letter.\n- If a result has \"ok\": false, use its \"message\" to ask for what is missing or offer the alternatives it gives.\n- On phone calls the caller's number is used automatically. On website calls, ask for a mobile number for the text confirmation.\n- To change or cancel a booking, you may be asked to verify: ask for the first name on the booking or the reference from their text.\n- Never give medical, legal or financial advice. For anything you cannot handle, offer to take a message and say the team will call back.\n- If the system is unavailable, apologise, take their name and number, and say the team will call back."
+      }
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "async": false,
+        "function": {
+          "name": "get_business_info",
+          "description": "Get today's date, opening hours, services, prices, address and policies. Call at the start of every conversation.",
+          "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": []
+          }
+        },
+        "server": {
+          "url": "https://n8n.YOUR-VPS-DOMAIN.com/webhook/bos/vapi?business=brightsmile-demo",
+          "credentialId": "REPLACE_WITH_VAPI_BEARER_CREDENTIAL_ID",
+          "timeoutSeconds": 20
+        }
+      },
+      {
+        "type": "function",
+        "async": false,
+        "function": {
+          "name": "check_availability",
+          "description": "Check open times for a service. Use before offering or booking any time.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "service": {
+                "type": "string",
+                "description": "Service name as returned by get_business_info"
+              },
+              "date": {
+                "type": "string",
+                "description": "Date as YYYY-MM-DD in the business's local time. Work it out from today's date."
+              },
+              "time": {
+                "type": "string",
+                "description": "Preferred time HH:MM (24h). Leave empty to list openings that day."
+              }
+            },
+            "required": [
+              "service",
+              "date"
+            ]
+          }
+        },
+        "server": {
+          "url": "https://n8n.YOUR-VPS-DOMAIN.com/webhook/bos/vapi?business=brightsmile-demo",
+          "credentialId": "REPLACE_WITH_VAPI_BEARER_CREDENTIAL_ID",
+          "timeoutSeconds": 20
+        }
+      },
+      {
+        "type": "function",
+        "async": false,
+        "function": {
+          "name": "book_appointment",
+          "description": "Book an appointment after the caller agreed to a time that check_availability showed as free.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "customer_name": {
+                "type": "string",
+                "description": "Caller's full name"
+              },
+              "phone": {
+                "type": "string",
+                "description": "Mobile number for the text confirmation. Leave empty on phone calls unless the caller wants a different number."
+              },
+              "service": {
+                "type": "string",
+                "description": "Service name"
+              },
+              "date": {
+                "type": "string",
+                "description": "Date as YYYY-MM-DD in the business's local time. Work it out from today's date."
+              },
+              "time": {
+                "type": "string",
+                "description": "Time as HH:MM in 24-hour format, business local time."
+              },
+              "notes": {
+                "type": "string",
+                "description": "Optional short note for the team"
+              }
+            },
+            "required": [
+              "customer_name",
+              "service",
+              "date",
+              "time"
+            ]
+          }
+        },
+        "server": {
+          "url": "https://n8n.YOUR-VPS-DOMAIN.com/webhook/bos/vapi?business=brightsmile-demo",
+          "credentialId": "REPLACE_WITH_VAPI_BEARER_CREDENTIAL_ID",
+          "timeoutSeconds": 20
+        }
+      },
+      {
+        "type": "function",
+        "async": false,
+        "function": {
+          "name": "find_appointment",
+          "description": "Look up the caller's upcoming bookings.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "phone": {
+                "type": "string",
+                "description": "Phone number on the booking (not needed on phone calls from the same number)"
+              },
+              "customer_name": {
+                "type": "string",
+                "description": "First name on the booking, for verification"
+              },
+              "ref": {
+                "type": "string",
+                "description": "Booking reference, if they have it"
+              }
+            },
+            "required": []
+          }
+        },
+        "server": {
+          "url": "https://n8n.YOUR-VPS-DOMAIN.com/webhook/bos/vapi?business=brightsmile-demo",
+          "credentialId": "REPLACE_WITH_VAPI_BEARER_CREDENTIAL_ID",
+          "timeoutSeconds": 20
+        }
+      },
+      {
+        "type": "function",
+        "async": false,
+        "function": {
+          "name": "reschedule_appointment",
+          "description": "Move an existing booking to a new date and time. Check availability first.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "ref": {
+                "type": "string",
+                "description": "Booking reference, if known"
+              },
+              "phone": {
+                "type": "string",
+                "description": "Phone number on the booking, if not calling from it"
+              },
+              "customer_name": {
+                "type": "string",
+                "description": "First name on the booking, for verification"
+              },
+              "date": {
+                "type": "string",
+                "description": "Date as YYYY-MM-DD in the business's local time. Work it out from today's date."
+              },
+              "time": {
+                "type": "string",
+                "description": "Time as HH:MM in 24-hour format, business local time."
+              }
+            },
+            "required": [
+              "date",
+              "time"
+            ]
+          }
+        },
+        "server": {
+          "url": "https://n8n.YOUR-VPS-DOMAIN.com/webhook/bos/vapi?business=brightsmile-demo",
+          "credentialId": "REPLACE_WITH_VAPI_BEARER_CREDENTIAL_ID",
+          "timeoutSeconds": 20
+        }
+      },
+      {
+        "type": "function",
+        "async": false,
+        "function": {
+          "name": "cancel_appointment",
+          "description": "Cancel a booking after the caller clearly confirmed they want to cancel.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "ref": {
+                "type": "string",
+                "description": "Booking reference, if known"
+              },
+              "phone": {
+                "type": "string",
+                "description": "Phone number on the booking, if not calling from it"
+              },
+              "customer_name": {
+                "type": "string",
+                "description": "First name on the booking, for verification"
+              },
+              "reason": {
+                "type": "string",
+                "description": "Reason, if given"
+              }
+            },
+            "required": []
+          }
+        },
+        "server": {
+          "url": "https://n8n.YOUR-VPS-DOMAIN.com/webhook/bos/vapi?business=brightsmile-demo",
+          "credentialId": "REPLACE_WITH_VAPI_BEARER_CREDENTIAL_ID",
+          "timeoutSeconds": 20
+        }
+      }
+    ]
+  },
+  "server": {
+    "url": "https://n8n.YOUR-VPS-DOMAIN.com/webhook/bos/vapi?business=brightsmile-demo",
+    "credentialId": "REPLACE_WITH_VAPI_BEARER_CREDENTIAL_ID",
+    "timeoutSeconds": 20
+  },
+  "serverMessages": [
+    "end-of-call-report"
+  ],
+  "endCallFunctionEnabled": true,
+  "metadata": {
+    "business": "brightsmile-demo"
+  }
+}

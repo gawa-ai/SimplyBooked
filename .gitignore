@@ -1,0 +1,12 @@
+# secrets / local env — never commit
+.env
+.env.*
+*.env
+supabase/.temp/
+supabase/functions/.env
+
+# build / tooling
+__pycache__/
+*.pyc
+node_modules/
+.DS_Store

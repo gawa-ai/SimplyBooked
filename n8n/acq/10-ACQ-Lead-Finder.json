@@ -1,0 +1,358 @@
+{
+  "name": "ACQ · Lead Finder",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "e1f8bee2-f6b6-5c85-a4e3-54ba0afbe73d",
+      "name": "Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select r as run from acq.claim_search_runs(3) as r;",
+        "options": {
+          "queryBatching": "independently"
+        }
+      },
+      "id": "51adeb4e-ec73-5047-b6bc-7ef6b444b0a0",
+      "name": "Claim Search Runs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        230,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "5f4fd383-5e9b-5b78-af30-0541775bd778",
+                    "leftValue": "={{ $json.run.provider }}",
+                    "rightValue": "osm_overpass",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "osm"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "5b46726b-59a9-5aae-b92d-0b84c5b68709",
+      "name": "Route Provider",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        460,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Builds an Overpass QL query from a claimed search run. All user text is stripped to a safe character set.\nconst run = $json.run;\nconst clean = s => String(s || '').replace(/[^\\p{L}\\p{N} .'\\-]/gu, '').trim().slice(0, 80);\nconst key = clean(run.niche).toLowerCase().replace(/[^a-z]/g, '').replace(/s$/, '');\nconst TAGS = {\n  dentist: ['amenity=dentist'], doctor: ['amenity=doctors', 'amenity=clinic'], clinic: ['amenity=clinic', 'amenity=doctors'],\n  physio: ['healthcare=physiotherapist'], physiotherapist: ['healthcare=physiotherapist'], physiotherapy: ['healthcare=physiotherapist'],\n  hairdresser: ['shop=hairdresser'], salon: ['shop=hairdresser', 'shop=beauty'], hairsalon: ['shop=hairdresser'], barber: ['shop=hairdresser'],\n  beauty: ['shop=beauty'], beautician: ['shop=beauty'], nail: ['shop=beauty'], spa: ['leisure=spa', 'shop=beauty'],\n  massage: ['shop=massage'], gym: ['leisure=fitness_centre'], fitness: ['leisure=fitness_centre'],\n  garage: ['shop=car_repair'], mechanic: ['shop=car_repair'], carrepair: ['shop=car_repair'],\n  vet: ['amenity=veterinary'], veterinary: ['amenity=veterinary'], optician: ['shop=optician'], tattoo: ['shop=tattoo'],\n};\nconst tags = TAGS[key];\nconst bad = error => ({ json: { run, query: '', error } });\nif (!tags) return bad('unsupported_niche:' + Object.keys(TAGS).join(','));\nconst city = clean(run.city), region = clean(run.region), cc = String(run.country_code || '').toUpperCase();\nif (!/^[A-Z]{2}$/.test(cc)) return bad('invalid_country');\nif (!city && !region) return bad('city_or_region_required');\nconst areas = ['area[\"ISO3166-1\"=\"' + cc + '\"]->.c;'];\nlet filter = '(area.c)';\nif (region) { areas.push('area[\"name\"=\"' + region + '\"]->.g;'); filter += '(area.g)'; }\nif (city)   { areas.push('area[\"name\"=\"' + city + '\"]->.a;'); filter += '(area.a)'; }\nconst parts = tags.map(t => { const [k, v] = t.split('='); return '  nwr[\"' + k + '\"=\"' + v + '\"]' + filter + ';'; });\nconst limit = Math.min(Math.max(Number(run.max_results) || 20, 1), 60) * 3;\nconst query = '[out:json][timeout:50];\\n' + areas.join('\\n') + '\\n(\\n' + parts.join('\\n') + '\\n);\\nout center tags ' + limit + ';';\nreturn { json: { run, query, error: '' } };\n",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "a2362f3a-3e8f-505b-8d1e-ae67f53e0f74",
+      "name": "Build Overpass Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 70000
+        },
+        "method": "POST",
+        "url": "https://overpass-api.de/api/interpreter",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "data",
+              "value": "={{ $json.query }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "BookingOS-LeadFinder/1.0 (contact via site owner)"
+            }
+          ]
+        }
+      },
+      "id": "104e0afa-5d2a-5fb9-badb-f3f64fdaf6f0",
+      "name": "Overpass Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        940,
+        20
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Maps an Overpass response to ingest items. Missing/failed responses become an explicit failure for the run.\nconst b = $('Build Overpass Query').item.json;\nconst run = b.run;\nconst res = $json;\nlet body = res.body;\nif (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = null; } }\nconst out = { run_id: run.run_id, org_id: run.org_id, source_id: run.source_id, items: [], ok: false, error: '',\n              defaults: { niche: run.niche, city: run.city || '', region: run.region || '', country_code: run.country_code } };\nif (b.error) { out.error = b.error; return { json: out }; }\nif (res.statusCode !== 200 || !body || !Array.isArray(body.elements)) {\n  out.error = 'overpass_http_' + (res.statusCode ?? 'none'); return { json: out };\n}\nconst seen = new Set();\nfor (const el of body.elements) {\n  const t = el.tags || {};\n  if (!t.name) continue;\n  const ext = 'osm:' + el.type + '/' + el.id;\n  if (seen.has(ext)) continue; seen.add(ext);\n  const street = [t['addr:housenumber'], t['addr:street']].filter(Boolean).join(' ');\n  out.items.push({\n    external_id: ext, business_name: t.name,\n    website: t.website || t['contact:website'] || t.url || '',\n    phone: t.phone || t['contact:phone'] || '', email: t.email || t['contact:email'] || '',\n    category: t.amenity || t.shop || t.healthcare || t.leisure || '',\n    address: [street, t['addr:city'], t['addr:postcode']].filter(Boolean).join(', '),\n    city: t['addr:city'] || run.city || '',\n    raw: { osm_type: el.type, osm_id: el.id, lat: el.lat ?? el.center?.lat ?? null, lon: el.lon ?? el.center?.lon ?? null,\n           opening_hours: t.opening_hours || null },\n  });\n  if (out.items.length >= (Number(run.max_results) || 20)) break;\n}\nout.ok = true;\nreturn { json: out };\n",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "7bd948f3-95a4-50d8-aeee-38f74f6406cb",
+      "name": "Map Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1180,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select acq.ingest_leads($1::uuid, $2::uuid, $3::uuid, ($4::jsonb)->'items', $5::jsonb) as r;",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ [ $json.org_id, $json.source_id, $json.run_id, { items: $json.items }, $json.defaults ] }}"
+        }
+      },
+      "id": "69f81848-5742-5e30-80a9-f21eba044d65",
+      "name": "Ingest Leads",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1420,
+        20
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const m = $('Map Results').item.json;\nconst r = $json.r || {};\nconst ok = m.ok && r.ok === true;\nreturn { json: { run_id: m.run_id, ok, error: ok ? '' : (m.error || 'ingest_failed'), created: r.created ?? 0, merged: r.merged ?? 0, duplicate: r.duplicate ?? 0 } };\n",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "e1dad024-b30b-5770-9cb9-3578c4f00426",
+      "name": "Finish OSM Run",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1660,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const run = $json.run;\nreturn { json: { run_id: run.run_id, ok: false, error: 'provider_not_configured:' + run.provider } };\n",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "e3e25ea7-6872-59aa-aa68-c316296a46a6",
+      "name": "Provider Not Configured",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select acq.complete_search_run($1::uuid, $2::boolean, nullif($3, '')) as r;",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ [ $json.run_id, $json.ok, $json.error ?? '' ] }}"
+        }
+      },
+      "id": "f82e4bb1-787d-5c8b-a1d2-ed45af0e1fa1",
+      "name": "Complete Run",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1900,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every 5 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Claim Search Runs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Search Runs": {
+      "main": [
+        [
+          {
+            "node": "Route Provider",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Provider": {
+      "main": [
+        [
+          {
+            "node": "Build Overpass Query",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Provider Not Configured",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Overpass Query": {
+      "main": [
+        [
+          {
+            "node": "Overpass Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Overpass Search": {
+      "main": [
+        [
+          {
+            "node": "Map Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Results": {
+      "main": [
+        [
+          {
+            "node": "Ingest Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ingest Leads": {
+      "main": [
+        [
+          {
+            "node": "Finish OSM Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finish OSM Run": {
+      "main": [
+        [
+          {
+            "node": "Complete Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Provider Not Configured": {
+      "main": [
+        [
+          {
+            "node": "Complete Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

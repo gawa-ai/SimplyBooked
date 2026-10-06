@@ -1,0 +1,189 @@
+{
+  "name": "ACQ · Daily Digest (internal)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "id": "34021adc-577e-581d-983d-2598a392be55",
+      "name": "Every 30 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select g from acq.claim_digests(3) as g;",
+        "options": {
+          "queryBatching": "independently"
+        }
+      },
+      "id": "87ddc92a-dfe4-5e57-9a71-3f0a4a139cf2",
+      "name": "Claim Digests",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        230,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const g = $json.g;\nreturn { json: { digest_id: g.digest_id, idempotency_key: g.idempotency_key,\n  resend_body: { from: g.from, to: [g.to], subject: g.subject, text: g.text, tags: [{ name: 'type', value: 'acq_digest' }] } } };\n",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "c640f9b0-64a7-5ddd-a1e5-5494a18ae7a3",
+      "name": "Prepare Digest Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        },
+        "method": "POST",
+        "url": "https://api.resend.com/emails",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Idempotency-Key",
+              "value": "={{ $json.idempotency_key }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.resend_body) }}"
+      },
+      "id": "8fc02e1f-3f26-50cf-ae96-60b4a94575f7",
+      "name": "Send Digest (Resend)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        690,
+        100
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_acq_resend",
+          "name": "ACQ Resend"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": false
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select acq.complete_digest($1::uuid, $2::int, $3::jsonb, nullif($4, '')) as r;",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ [ $('Claim Digests').item.json.g.digest_id, $json.statusCode ?? 0, ($json.body && typeof $json.body === 'object') ? $json.body : { raw: String($json.body ?? '').slice(0, 300) }, $json.error ? JSON.stringify($json.error).slice(0, 300) : '' ] }}"
+        }
+      },
+      "id": "a000b5fd-7be6-54d5-907f-5d6b1aa73462",
+      "name": "Complete Digest",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        920,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every 30 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Claim Digests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Digests": {
+      "main": [
+        [
+          {
+            "node": "Prepare Digest Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Digest Email": {
+      "main": [
+        [
+          {
+            "node": "Send Digest (Resend)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Digest (Resend)": {
+      "main": [
+        [
+          {
+            "node": "Complete Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

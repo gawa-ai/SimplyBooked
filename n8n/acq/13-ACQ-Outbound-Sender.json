@@ -1,0 +1,467 @@
+{
+  "name": "ACQ · Outbound Sender (approved only)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "e07a49f5-37fe-5d9b-b473-f81f1bad00c8",
+      "name": "Every Minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select p as msg from acq.claim_outbound(3) as p;",
+        "options": {
+          "queryBatching": "independently"
+        }
+      },
+      "id": "4619d1b8-dd6f-515c-83e2-c68efed21093",
+      "name": "Claim Outbound",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        230,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "5d12b81b-7281-539b-80fb-0ffd07c65c1b",
+                    "leftValue": "={{ $json.msg.kind }}",
+                    "rightValue": "email",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "email"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "1446c69e-8de9-5fa2-aa9c-6d199686eaec",
+                    "leftValue": "={{ $json.msg.kind }}",
+                    "rightValue": "sms",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "sms"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5007757e-17b4-5b13-b669-3bc469d4d735",
+      "name": "Route Channel",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        460,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Resend request body from the claimed payload (already rendered + footer/List-Unsubscribe added by the database).\nconst m = $json.msg;\nreturn { json: { message_id: m.message_id, idempotency_key: m.idempotency_key,\n  resend_body: { from: m.from, to: [m.to], reply_to: m.reply_to, subject: m.subject, html: m.html, text: m.text, headers: m.headers, tags: m.tags } } };\n",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "f2f6ab42-f7bb-5dbb-b7ee-12192043e323",
+      "name": "Prepare Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        },
+        "method": "POST",
+        "url": "https://api.resend.com/emails",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Idempotency-Key",
+              "value": "={{ $json.idempotency_key }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.resend_body) }}"
+      },
+      "id": "25d2f6c5-fcd2-52d4-b9ee-ccd1db06f3d7",
+      "name": "Send Email (Resend)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        940,
+        20
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_acq_resend",
+          "name": "ACQ Resend"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// SMS is off by default. If an account SID / sender number is missing the job fails visibly instead of sending something odd.\nconst m = $json.msg;\nconst ok = /^AC[0-9a-fA-F]{32}$/.test(m.account_sid || '') && /^\\+[1-9][0-9]{7,14}$/.test(m.from || '');\nreturn { json: { message_id: m.message_id, ok: ok ? 'yes' : 'no', account_sid: m.account_sid || '', to: m.to, from: m.from, body: m.body } };\n",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "eb8e8486-4854-5a19-9268-c9d357dd3346",
+      "name": "Prepare SMS",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "81c72dd0-ffc0-5693-ba16-49a351aa0514",
+                    "leftValue": "={{ $json.ok }}",
+                    "rightValue": "yes",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "yes"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "67e863e5-07cc-5d2d-9fb4-29222fa5a8a5",
+                    "leftValue": "={{ $json.ok }}",
+                    "rightValue": "no",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "no"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "831b2045-7664-5404-a210-3aa933f0a0e3",
+      "name": "SMS Configured",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        940,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 20000
+        },
+        "method": "POST",
+        "url": "=https://api.twilio.com/2010-04-01/Accounts/{{ $json.account_sid }}/Messages.json",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "twilioApi",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "To",
+              "value": "={{ $json.to }}"
+            },
+            {
+              "name": "From",
+              "value": "={{ $json.from }}"
+            },
+            {
+              "name": "Body",
+              "value": "={{ $json.body }}"
+            }
+          ]
+        }
+      },
+      "id": "f1163e0b-fadb-5bee-905b-1cfba9cd2b18",
+      "name": "Send SMS (Twilio)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1180,
+        180
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "REPLACE_twilio",
+          "name": "BOS Twilio"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": false
+    },
+    {
+      "parameters": {
+        "jsCode": "return { json: { statusCode: 0, body: { message: 'sms_sender_not_configured' } } };",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "cae13beb-fd94-5741-ae62-d01884dd433f",
+      "name": "SMS Not Configured",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1180,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select acq.complete_outbound($1::uuid, $2::int, $3::jsonb, nullif($4, '')) as r;",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ [ $('Claim Outbound').item.json.msg.message_id, $json.statusCode ?? 0, ($json.body && typeof $json.body === 'object') ? $json.body : { raw: String($json.body ?? '').slice(0, 300) }, $json.error ? JSON.stringify($json.error).slice(0, 300) : '' ] }}"
+        }
+      },
+      "id": "2a7078d8-186f-51fb-a957-f5c252d09901",
+      "name": "Complete Outbound",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1420,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every Minute": {
+      "main": [
+        [
+          {
+            "node": "Claim Outbound",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Outbound": {
+      "main": [
+        [
+          {
+            "node": "Route Channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Channel": {
+      "main": [
+        [
+          {
+            "node": "Prepare Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Email": {
+      "main": [
+        [
+          {
+            "node": "Send Email (Resend)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email (Resend)": {
+      "main": [
+        [
+          {
+            "node": "Complete Outbound",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare SMS": {
+      "main": [
+        [
+          {
+            "node": "SMS Configured",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SMS Configured": {
+      "main": [
+        [
+          {
+            "node": "Send SMS (Twilio)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "SMS Not Configured",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS (Twilio)": {
+      "main": [
+        [
+          {
+            "node": "Complete Outbound",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SMS Not Configured": {
+      "main": [
+        [
+          {
+            "node": "Complete Outbound",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

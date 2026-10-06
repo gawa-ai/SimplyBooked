@@ -1,0 +1,154 @@
+{
+  "name": "ACQ · Meeting Calendar Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "a776afb4-a296-594d-a601-71fb2f9d0c74",
+      "name": "Every Minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select c as job from acq.claim_meeting_calendar(5) as c;",
+        "options": {
+          "queryBatching": "independently"
+        }
+      },
+      "id": "7ffaf47f-e348-5acc-a1d0-c3f0fb6f0dab",
+      "name": "Claim Calendar Jobs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        230,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 20000
+        },
+        "method": "={{ $json.job.method }}",
+        "url": "={{ $json.job.url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleCalendarOAuth2Api",
+        "sendBody": "={{ $json.job.method !== 'DELETE' }}",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.job.body) }}"
+      },
+      "id": "98b751ff-7980-5b1a-a8da-a80b950867f1",
+      "name": "Google Calendar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        470,
+        100
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "REPLACE_gcal",
+          "name": "BOS Google Calendar"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select acq.complete_meeting_calendar($1::uuid, $2::int, $3::int, $4::jsonb, nullif($5, '')) as r;",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ [ $('Claim Calendar Jobs').item.json.job.meeting_id, $('Claim Calendar Jobs').item.json.job.version, $json.statusCode ?? 0, ($json.body && typeof $json.body === 'object') ? $json.body : { raw: String($json.body ?? '').slice(0, 300) }, $json.error ? JSON.stringify($json.error).slice(0, 300) : '' ] }}"
+        }
+      },
+      "id": "629c4b91-120e-5420-b43e-85604c1338b5",
+      "name": "Complete Calendar Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        710,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every Minute": {
+      "main": [
+        [
+          {
+            "node": "Claim Calendar Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Calendar Jobs": {
+      "main": [
+        [
+          {
+            "node": "Google Calendar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Calendar": {
+      "main": [
+        [
+          {
+            "node": "Complete Calendar Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

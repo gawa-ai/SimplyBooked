@@ -1,0 +1,65 @@
+{
+  "name": "BOS · Error Handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "582e491d-2b22-5de0-96c4-ed18e935771b",
+      "name": "On Workflow Error",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select bos.log_error($1, $2, $3, $4::jsonb) as result;",
+        "options": {
+          "queryReplacement": "={{ [ $json.workflow?.name ?? '', $json.execution?.lastNodeExecuted ?? '', $json.execution?.error?.message ?? 'unknown error', { execution_id: $json.execution?.id ?? null, url: $json.execution?.url ?? null, workflow_id: $json.workflow?.id ?? null } ] }}",
+          "queryBatching": "independently"
+        }
+      },
+      "id": "e16866cf-96cc-5e5a-bbe6-01a4743d1c41",
+      "name": "Log Error",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        260,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "On Workflow Error": {
+      "main": [
+        [
+          {
+            "node": "Log Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

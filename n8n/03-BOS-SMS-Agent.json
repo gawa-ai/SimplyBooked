@@ -1,0 +1,561 @@
+{
+  "name": "BOS · SMS Agent (Twilio inbound)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "bos/twilio-sms",
+        "authentication": "basicAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "0c8d2b88-40aa-5bfe-9fb9-0e9ff6c9617e",
+      "name": "Twilio SMS Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        100
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "REPLACE_twilio_basic",
+          "name": "BOS Twilio Webhook Auth"
+        }
+      },
+      "webhookId": "73b83d2c-149a-5847-9e3b-18f00dd65ed1"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select bos.inbound_sms($1, $2, $3, $4, $5::jsonb) as r;",
+        "options": {
+          "queryReplacement": "={{ [ $json.body.To ?? '', $json.body.From ?? '', $json.body.Body ?? '', $json.body.MessageSid ?? '', $json.body ?? {} ] }}",
+          "queryBatching": "independently"
+        }
+      },
+      "id": "e71bf679-a7cd-5031-bc50-069fde516b95",
+      "name": "Inbound SMS",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        230,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response></Response>",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/xml"
+              }
+            ]
+          }
+        }
+      },
+      "id": "97605912-b157-5776-be6f-aa70eece566c",
+      "name": "Ack Twilio",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        460,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "974e0611-85cc-567d-8fbf-9d5059570b0e",
+                    "leftValue": "={{ $json.r.action }}",
+                    "rightValue": "reply",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "reply"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "68f0aa81-5788-5646-b65d-5d07014961d4",
+                    "leftValue": "={{ $json.r.action }}",
+                    "rightValue": "agent",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "agent"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "be74d8df-044e-5063-a578-765ed3de3ce4",
+      "name": "Route Reply",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        680,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.r.message }}",
+        "options": {
+          "systemMessage": "={{ $json.r.system_prompt }}",
+          "maxIterations": 6
+        }
+      },
+      "id": "b7711c0a-5627-5a11-a956-a782492a051f",
+      "name": "SMS Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        920,
+        240
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini",
+          "cachedResultName": "gpt-5-mini"
+        },
+        "options": {}
+      },
+      "id": "713826c6-b122-56ec-84d5-e919195909df",
+      "name": "OpenAI Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        760,
+        460
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "REPLACE_openai",
+          "name": "BOS OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Inbound SMS').item.json.r.session_key }}",
+        "tableName": "bos_chat_histories",
+        "contextWindowLength": 12
+      },
+      "id": "cc910738-bbc4-5b4a-9fe9-a86c561bda98",
+      "name": "Chat Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        900,
+        460
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Check open appointment times for a service on a date. Always use before offering or booking a time.",
+        "operation": "executeQuery",
+        "query": "select bos.dispatch($1, 'check_availability', $2::jsonb, $3, 'sms', $4::jsonb)::text as result;",
+        "options": {
+          "queryReplacement": "={{ [ $('Inbound SMS').item.json.r.business_id, { service: $fromAI('service', 'Service name as listed under SERVICES', 'string'), date: $fromAI('date', 'Date as YYYY-MM-DD in the business timezone', 'string'), time: $fromAI('time', 'Preferred time as HH:MM (24h), or empty to list openings that day', 'string', '') }, $('Inbound SMS').item.json.r.idem_prefix + ':check_availability', { caller_phone: $('Inbound SMS').item.json.r.from } ] }}"
+        }
+      },
+      "id": "68b35891-108a-5c13-b3ad-3d42e7624c5d",
+      "name": "check_availability",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.5,
+      "position": [
+        1040,
+        460
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Book an appointment for this customer (their phone number is added automatically). Only after check_availability showed the time is free and the customer agreed.",
+        "operation": "executeQuery",
+        "query": "select bos.dispatch($1, 'book', $2::jsonb, $3, 'sms', $4::jsonb)::text as result;",
+        "options": {
+          "queryReplacement": "={{ [ $('Inbound SMS').item.json.r.business_id, { customer_name: $fromAI('customer_name', 'Customer full name', 'string'), service: $fromAI('service', 'Service name as listed under SERVICES', 'string'), date: $fromAI('date', 'Date as YYYY-MM-DD', 'string'), time: $fromAI('time', 'Time as HH:MM (24h)', 'string'), notes: $fromAI('notes', 'Optional short note for the team, or empty', 'string', '') }, $('Inbound SMS').item.json.r.idem_prefix + ':book', { caller_phone: $('Inbound SMS').item.json.r.from } ] }}"
+        }
+      },
+      "id": "612d6ccb-e205-5d41-bda1-7739e0c8ba44",
+      "name": "book_appointment",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.5,
+      "position": [
+        1180,
+        460
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Move this customer's existing booking to a new date and time. Check availability first.",
+        "operation": "executeQuery",
+        "query": "select bos.dispatch($1, 'reschedule', $2::jsonb, $3, 'sms', $4::jsonb)::text as result;",
+        "options": {
+          "queryReplacement": "={{ [ $('Inbound SMS').item.json.r.business_id, { ref: $fromAI('ref', 'Booking reference if the customer has more than one booking, else empty', 'string', ''), date: $fromAI('date', 'New date as YYYY-MM-DD', 'string'), time: $fromAI('time', 'New time as HH:MM (24h)', 'string') }, $('Inbound SMS').item.json.r.idem_prefix + ':reschedule', { caller_phone: $('Inbound SMS').item.json.r.from } ] }}"
+        }
+      },
+      "id": "5fcc3a55-cf74-54e9-aeef-8d61f7e28831",
+      "name": "reschedule_appointment",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.5,
+      "position": [
+        1320,
+        460
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Cancel this customer's booking. Only when the customer clearly asked to cancel.",
+        "operation": "executeQuery",
+        "query": "select bos.dispatch($1, 'cancel', $2::jsonb, $3, 'sms', $4::jsonb)::text as result;",
+        "options": {
+          "queryReplacement": "={{ [ $('Inbound SMS').item.json.r.business_id, { ref: $fromAI('ref', 'Booking reference if the customer has more than one booking, else empty', 'string', ''), reason: $fromAI('reason', 'Short reason if given, else empty', 'string', '') }, $('Inbound SMS').item.json.r.idem_prefix + ':cancel', { caller_phone: $('Inbound SMS').item.json.r.from } ] }}"
+        }
+      },
+      "id": "2b38b735-e335-5891-a3d4-75b9513deec5",
+      "name": "cancel_appointment",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.5,
+      "position": [
+        1460,
+        460
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const r = $('Inbound SMS').item.json.r;\nconst agentText = typeof $json.output === 'string' ? $json.output.trim() : '';\nlet body = agentText || r.sms?.body || r.fallback_reply;\nif (body.length > 640) body = body.slice(0, 637) + '...';\nreturn { json: { business_id: r.business_id, to: r.from, from: r.to, account_sid: r.account_sid, body } };\n"
+      },
+      "id": "86e4b90c-1dd4-5160-9c34-393c9adfceec",
+      "name": "Build Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1180,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.twilio.com/2010-04-01/Accounts/{{ $json.account_sid }}/Messages.json",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "twilioApi",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "To",
+              "value": "={{ $json.to }}"
+            },
+            {
+              "name": "From",
+              "value": "={{ $json.from }}"
+            },
+            {
+              "name": "Body",
+              "value": "={{ $json.body }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 20000
+        }
+      },
+      "id": "8ff1d22f-1196-5512-b527-a0c2214dfb71",
+      "name": "Send Reply SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1420,
+        100
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "REPLACE_twilio",
+          "name": "BOS Twilio"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": false
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select bos.log_outbound($1::uuid, $2, $3, $4, $5, $6::int) as result;",
+        "options": {
+          "queryReplacement": "={{ [ $('Build Reply').item.json.business_id, $('Build Reply').item.json.to, $('Build Reply').item.json.from, $('Build Reply').item.json.body, $json.body?.sid ?? '', $json.statusCode ?? 0 ] }}",
+          "queryBatching": "independently"
+        }
+      },
+      "id": "b59c7ac1-bf75-52e6-97c9-f0ddf1de1573",
+      "name": "Log Reply",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1660,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Twilio SMS Webhook": {
+      "main": [
+        [
+          {
+            "node": "Inbound SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Inbound SMS": {
+      "main": [
+        [
+          {
+            "node": "Ack Twilio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ack Twilio": {
+      "main": [
+        [
+          {
+            "node": "Route Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Reply": {
+      "main": [
+        [
+          {
+            "node": "Build Reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "SMS Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SMS Agent": {
+      "main": [
+        [
+          {
+            "node": "Build Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Reply": {
+      "main": [
+        [
+          {
+            "node": "Send Reply SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Reply SMS": {
+      "main": [
+        [
+          {
+            "node": "Log Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "SMS Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "SMS Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check_availability": {
+      "ai_tool": [
+        [
+          {
+            "node": "SMS Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "book_appointment": {
+      "ai_tool": [
+        [
+          {
+            "node": "SMS Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "reschedule_appointment": {
+      "ai_tool": [
+        [
+          {
+            "node": "SMS Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "cancel_appointment": {
+      "ai_tool": [
+        [
+          {
+            "node": "SMS Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

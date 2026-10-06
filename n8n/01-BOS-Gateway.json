@@ -1,0 +1,189 @@
+{
+  "name": "BOS · Gateway (Voice + Website + API)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "bos/vapi",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "ef18528c-d04b-5876-8ece-c4f3ea0f9ea8",
+      "name": "Vapi Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_vapi_secret",
+          "name": "BOS Vapi Secret"
+        }
+      },
+      "webhookId": "d163bd82-acd9-57a9-b33c-d1dad35b7aab"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "bos/api",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "62c347c6-b7d4-5576-8980-0124251350c4",
+      "name": "API Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        220
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_api_secret",
+          "name": "BOS API Secret"
+        }
+      },
+      "webhookId": "113e6fab-8c2f-571e-8c8b-f3291bc2b084"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Turns a Vapi server message or an API request into one item per tool call.\n// Identity (business, caller phone) comes from Vapi/call data, never from what the AI says.\nconst out = [];\nfor (const item of $input.all()) {\n  const req = item.json || {};\n  const body = req.body || {};\n  const q = req.query || {};\n  const msg = body.message;\n\n  if (msg && typeof msg === 'object') {\n    const call = msg.call || {};\n    const isPhone = String(call.type || '').toLowerCase().includes('phone');\n    const base = {\n      channel: 'vapi',\n      business: String(q.business || msg.assistant?.metadata?.business || ''),\n      source: isPhone ? 'voice' : 'web_voice',\n      ctx: {\n        assistant_id: String(call.assistantId || msg.assistant?.id || ''),\n        caller_phone: isPhone ? String(call.customer?.number || msg.customer?.number || '') : '',\n        call_id: String(call.id || ''),\n      },\n      idem: '',\n      tool_call_id: '',\n    };\n\n    if (msg.type === 'tool-calls') {\n      const calls = (Array.isArray(msg.toolCallList) && msg.toolCallList.length)\n        ? msg.toolCallList\n        : (msg.toolWithToolCallList || []).map(t => t.toolCall).filter(Boolean);\n      for (const tc of calls) {\n        let args = tc.function?.arguments ?? tc.arguments ?? tc.parameters ?? {};\n        if (typeof args === 'string') { try { args = JSON.parse(args || '{}'); } catch (e) { args = {}; } }\n        out.push({ json: { ...base, kind: 'tool', tool: String(tc.function?.name || tc.name || ''),\n                           args, idem: String(tc.id || ''), tool_call_id: String(tc.id || '') } });\n      }\n      if (!calls.length) out.push({ json: { ...base, kind: 'event', tool: 'noop', args: {} } });\n    } else if (msg.type === 'end-of-call-report') {\n      const art = msg.artifact || {};\n      out.push({ json: { ...base, source: 'vapi_event', kind: 'event', tool: 'record_call', args: {\n        call_id: String(call.id || ''),\n        call_type: String(call.type || ''),\n        customer_phone: String(call.customer?.number || msg.customer?.number || ''),\n        started_at: String(msg.startedAt || call.startedAt || ''),\n        ended_at: String(msg.endedAt || call.endedAt || ''),\n        ended_reason: String(msg.endedReason || call.endedReason || ''),\n        summary: String(msg.analysis?.summary || msg.summary || ''),\n        transcript: String(art.transcript || msg.transcript || ''),\n        recording_url: String(art.recordingUrl || art.recording?.mono?.combinedUrl || msg.recordingUrl || ''),\n        cost: msg.cost ?? call.cost ?? '',\n      } } });\n    } else {\n      out.push({ json: { ...base, kind: 'event', tool: 'noop', args: {} } });\n    }\n  } else {\n    // Website form / dashboard / server-to-server. Keep the API secret server-side only.\n    const source = ['website', 'dashboard', 'api'].includes(body.source) ? body.source : 'api';\n    let args = body.args ?? body.payload ?? {};\n    if (typeof args === 'string') { try { args = JSON.parse(args || '{}'); } catch (e) { args = {}; } }\n    out.push({ json: {\n      channel: 'api', kind: 'tool', source,\n      business: String(body.business || q.business || ''),\n      tool: String(body.tool || body.action || ''),\n      args,\n      idem: String(body.idempotency_key || ''),\n      tool_call_id: '',\n      ctx: { trusted: source === 'dashboard', caller_phone: '' },\n    } });\n  }\n}\nreturn out;\n"
+      },
+      "id": "190b06e7-f7ac-5fea-8d95-581a58965abb",
+      "name": "Normalize Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        110
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select $1::text as tool_call_id, $2::text as kind,\n       bos.dispatch(nullif($3, ''), $4, $5::jsonb, nullif($6, ''), $7, $8::jsonb) as result;",
+        "options": {
+          "queryReplacement": "={{ [ $json.tool_call_id ?? '', $json.kind ?? '', $json.business ?? '', $json.tool ?? '', $json.args ?? {}, $json.idem ?? '', $json.source ?? 'api', $json.ctx ?? {} ] }}",
+          "queryBatching": "independently"
+        }
+      },
+      "id": "e8d334db-1700-52f6-a1e7-814b2a2989f5",
+      "name": "Run Tool",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        500,
+        110
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Vapi expects { results: [{ toolCallId, result }] }. Everything else gets the tool result.\nconst rows = $input.all().map(i => i.json);\nconst reqs = $('Normalize Request').all().map(i => i.json);\nconst unavailable = {\n  ok: false, error: 'system_unavailable',\n  message: 'The booking system is not responding right now. Apologise, take the caller\\'s name and number, and say the team will call back.',\n};\n\nif ((reqs[0] || {}).channel === 'vapi') {\n  const results = [];\n  rows.forEach((r, i) => {\n    const id = r.tool_call_id || reqs[i]?.tool_call_id;\n    if (!id) return;\n    results.push({ toolCallId: id, result: JSON.stringify(r.result || unavailable) });\n  });\n  return [{ json: { response: results.length ? { results } : { ok: true } } }];\n}\nconst r = rows[0] || {};\nreturn [{ json: { response: r.result || { ...unavailable, detail: r.error?.message || r.error || null } } }];\n"
+      },
+      "id": "8456d158-6f5d-5e07-a116-1898d8f92a69",
+      "name": "Build Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        740,
+        110
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.response) }}",
+        "options": {}
+      },
+      "id": "46800641-5baa-5a53-96a9-0cad5b258276",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        980,
+        110
+      ]
+    }
+  ],
+  "connections": {
+    "Vapi Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Request": {
+      "main": [
+        [
+          {
+            "node": "Run Tool",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Tool": {
+      "main": [
+        [
+          {
+            "node": "Build Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Response": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

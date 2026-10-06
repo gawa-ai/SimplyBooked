@@ -1,0 +1,299 @@
+{
+  "name": "BOS · Worker (SMS + Calendar)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "0ee00df8-8265-50f4-8808-d0444aae3b0e",
+      "name": "Every Minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select job from bos.claim_jobs(25) as job;",
+        "options": {
+          "queryBatching": "independently"
+        }
+      },
+      "id": "3740f0c6-bbe7-5282-9af8-942c6239c8f8",
+      "name": "Claim Jobs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        230,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "6d9bd908-f6da-503c-b3e1-4254a25d914d",
+                    "leftValue": "={{ $json.job.kind }}",
+                    "rightValue": "sms",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "sms"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "63c9b34b-a103-5eb2-9df0-25973328bd21",
+                    "leftValue": "={{ $json.job.kind }}",
+                    "rightValue": "calendar",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "calendar"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cbe652d9-fcd4-53c1-b39d-e9a48e4e17a4",
+      "name": "Route Job",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        460,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.twilio.com/2010-04-01/Accounts/{{ $json.job.account_sid }}/Messages.json",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "twilioApi",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "To",
+              "value": "={{ $json.job.to }}"
+            },
+            {
+              "name": "From",
+              "value": "={{ $json.job.from }}"
+            },
+            {
+              "name": "Body",
+              "value": "={{ $json.job.body }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 20000
+        }
+      },
+      "id": "c3cec533-b210-56c0-baba-7e62193441a9",
+      "name": "Send SMS (Twilio)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        0
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "REPLACE_twilio",
+          "name": "BOS Twilio"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": false
+    },
+    {
+      "parameters": {
+        "method": "={{ $json.job.method }}",
+        "url": "={{ $json.job.url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleCalendarOAuth2Api",
+        "sendBody": "={{ $json.job.method !== 'DELETE' }}",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.job.body) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 20000
+        }
+      },
+      "id": "24c661a1-ffc0-5c3f-a812-b28a20693a02",
+      "name": "Sync Google Calendar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        220
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "REPLACE_gcal",
+          "name": "BOS Google Calendar"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select bos.complete_job($1::bigint, $2::int, $3::jsonb, nullif($4, '')) as result;",
+        "options": {
+          "queryReplacement": "={{ [ $('Claim Jobs').item.json.job.job_id, $json.statusCode ?? 0, ($json.body && typeof $json.body === 'object') ? $json.body : { raw: String($json.body ?? '') }, $json.error ? JSON.stringify($json.error).slice(0, 400) : '' ] }}",
+          "queryBatching": "independently"
+        }
+      },
+      "id": "b76e6602-89ab-5064-8cbc-7b3f4ea849b4",
+      "name": "Complete Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        980,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every Minute": {
+      "main": [
+        [
+          {
+            "node": "Claim Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Jobs": {
+      "main": [
+        [
+          {
+            "node": "Route Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Job": {
+      "main": [
+        [
+          {
+            "node": "Send SMS (Twilio)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sync Google Calendar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS (Twilio)": {
+      "main": [
+        [
+          {
+            "node": "Complete Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sync Google Calendar": {
+      "main": [
+        [
+          {
+            "node": "Complete Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
