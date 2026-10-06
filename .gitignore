@@ -10,3 +10,7 @@ __pycache__/
 *.pyc
 node_modules/
 .DS_Store
+
+# fetched at build time by scripts/fetch-media.sh
+site/media/*
+!site/media/.gitkeep

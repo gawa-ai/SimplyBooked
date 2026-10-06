@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in — SimplyBooked</title>
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="icon" href="/assets/icon-32.png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/assets/icon-180.png">
+  <link rel="preload" href="/assets/fonts/InterDisplay-Bold.woff" as="font" type="font/woff" crossorigin>
+  <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/login.css">
+  <script src="/js/login.js" type="module"></script>
+</head>
+<body class="login">
+  <main class="login-grid">
+    <section class="login-panel" aria-labelledby="login-title">
+      <a class="login-brand" href="/" aria-label="SimplyBooked home">
+        <img src="/assets/logo.png" alt="SimplyBooked" width="137" height="36">
+      </a>
+
+      <div class="login-body">
+        <h1 id="login-title" class="js-title">Welcome back</h1>
+        <p class="login-sub js-sub">Sign in to see today's bookings, calls and messages.</p>
+
+        <div class="notice js-notice" role="status" aria-live="polite" hidden></div>
+
+        <form class="login-form js-form" novalidate>
+          <div class="field js-field-email">
+            <label for="email">Email</label>
+            <input id="email" name="email" type="email" autocomplete="email" inputmode="email" required spellcheck="false">
+          </div>
+          <div class="field js-field-password">
+            <div class="field-row">
+              <label for="password" class="js-password-label">Password</label>
+              <button type="button" class="link-btn js-to-reset">Forgot password?</button>
+            </div>
+            <div class="password-wrap">
+              <input id="password" name="password" type="password" autocomplete="current-password" required minlength="8">
+              <button type="button" class="reveal js-reveal" aria-controls="password" aria-pressed="false">Show</button>
+            </div>
+          </div>
+          <p class="field-error js-error" role="alert" hidden></p>
+          <button class="btn btn-primary btn-lg login-submit js-submit" type="submit">Sign in</button>
+        </form>
+
+        <div class="login-alt js-alt">
+          <button type="button" class="link-btn js-to-link">Email me a sign-in link instead</button>
+          <button type="button" class="link-btn js-to-password" hidden>Sign in with a password instead</button>
+        </div>
+      </div>
+
+      <p class="login-foot">New to SimplyBooked? <a href="/app.html?demo=1">Explore the demo dashboard</a></p>
+    </section>
+
+    <aside class="login-film" aria-hidden="true">
+      <video class="js-video" autoplay muted loop playsinline preload="auto"
+             poster="/.netlify/images?url=/media/hero-poster.png&amp;w=1400&amp;fm=webp&amp;q=80">
+        <source src="/media/login.mp4" type="video/mp4">
+      </video>
+    </aside>
+  </main>
+</body>
+</html>

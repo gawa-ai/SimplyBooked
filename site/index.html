@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SimplyBooked — the receptionist who never misses a call</title>
+  <meta name="description" content="SimplyBooked answers your phone, books appointments straight into your calendar and texts every customer their confirmation, while you look after the one in front of you.">
+  <meta name="theme-color" content="#ffffff">
+  <meta property="og:title" content="SimplyBooked — the receptionist who never misses a call">
+  <meta property="og:description" content="Calls answered, appointments booked, confirmations and reminders sent. For barbers, salons, clinics, garages and every appointment business.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="/assets/og.png">
+  <link rel="icon" href="/assets/icon-32.png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/assets/icon-180.png">
+  <link rel="preload" href="/assets/fonts/InterDisplay-ExtraBold.woff" as="font" type="font/woff" crossorigin>
+  <link rel="preload" href="/assets/fonts/Inter-Regular.woff" as="font" type="font/woff" crossorigin>
+  <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/site.css">
+  <script src="/js/landing.js" type="module"></script>
+</head>
+<body class="landing">
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-head">
+    <div class="wrap site-head-row">
+      <a class="brand" href="/" aria-label="SimplyBooked home">
+        <img src="/assets/logo.png" alt="SimplyBooked" width="152" height="40">
+      </a>
+      <nav class="site-nav" aria-label="Main">
+        <a href="#how">How it works</a>
+        <a href="#who">Who it's for</a>
+        <a href="#questions">Questions</a>
+      </nav>
+      <div class="site-head-actions">
+        <a class="text-link" href="/login.html">Sign in</a>
+        <a class="btn btn-dark btn-sm" href="/app.html?demo=1">See the dashboard</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- Hero: the phone stays still while the business around it changes -->
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <h1 id="hero-title">The receptionist who never misses a call.</h1>
+          <p class="hero-lede">SimplyBooked answers your phone, books appointments straight into your calendar and texts every customer their confirmation — while you look after the one in front of you.</p>
+          <div class="hero-actions">
+            <a class="btn btn-primary btn-lg" href="/app.html?demo=1">See the dashboard</a>
+            <a class="btn btn-ghost btn-lg" href="#how">How it works</a>
+            <a class="btn btn-ghost btn-lg js-contact" href="#" hidden>Book a call</a>
+          </div>
+          <p class="hero-note">For barbers, salons, clinics, garages and every business that runs on appointments.</p>
+        </div>
+
+        <figure class="hero-stage">
+          <div class="stage-frame">
+            <video class="stage-video js-video" autoplay muted loop playsinline preload="auto"
+                   poster="/.netlify/images?url=/media/hero-poster.png&amp;w=1400&amp;fm=webp&amp;q=80"
+                   aria-label="A phone showing the SimplyBooked dashboard while a barbershop, a salon, a clinic, a garage and a bakery change around it">
+              <source src="/media/hero.mp4" type="video/mp4">
+            </video>
+          </div>
+          <div class="sms" role="img" aria-label="Example confirmation text: Hi Emma, your haircut at Leo's is booked for Thu 9 Oct at 2:30pm. Ref K7Q2MP. Reply C to confirm.">
+            <div class="sms-head">
+              <img src="/assets/mark.png" alt="" width="18" height="25">
+              <span>Leo's Barbers</span>
+              <span class="sms-time">now</span>
+            </div>
+            <p>Hi Emma, your haircut at Leo's is booked for Thu 9 Oct at 2:30pm. Ref K7Q2MP. Reply C to confirm.</p>
+          </div>
+          <figcaption class="sr-only">SimplyBooked works the same way for every kind of appointment business.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- Who it's for -->
+    <section class="who" id="who" aria-labelledby="who-title">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 id="who-title">Busy with a customer? That's exactly when the phone rings.</h2>
+          <p>Every missed call is a booking that goes to someone else. SimplyBooked picks up, in your business's name, so you never have to choose between the person in your chair and the one on the line.</p>
+        </div>
+        <ul class="trades" role="list">
+          <li class="trade">
+            <div class="trade-media"><video class="js-video js-lazy" muted loop playsinline preload="none" data-src="/media/barber.mp4" aria-hidden="true"></video></div>
+            <h3>Barbers</h3><p>Mid-fade when the phone rings.</p>
+          </li>
+          <li class="trade">
+            <div class="trade-media"><video class="js-video js-lazy" muted loop playsinline preload="none" data-src="/media/salon.mp4" aria-hidden="true"></video></div>
+            <h3>Hair and beauty</h3><p>Colour on, hands full.</p>
+          </li>
+          <li class="trade">
+            <div class="trade-media"><video class="js-video js-lazy" muted loop playsinline preload="none" data-src="/media/dental.mp4" aria-hidden="true"></video></div>
+            <h3>Dental and clinics</h3><p>Chairside all morning, front desk empty.</p>
+          </li>
+          <li class="trade">
+            <div class="trade-media"><video class="js-video js-lazy" muted loop playsinline preload="none" data-src="/media/garage.mp4" aria-hidden="true"></video></div>
+            <h3>Garages</h3><p>Under the bonnet, can't pick up.</p>
+          </li>
+          <li class="trade">
+            <div class="trade-media"><video class="js-video js-lazy" muted loop playsinline preload="none" data-src="/media/optician.mp4" aria-hidden="true"></video></div>
+            <h3>Opticians</h3><p>Mid-fitting with a customer.</p>
+          </li>
+          <li class="trade">
+            <div class="trade-media"><video class="js-video js-lazy" muted loop playsinline preload="none" data-src="/media/bakery.mp4" aria-hidden="true"></video></div>
+            <h3>Bakers and makers</h3><p>Hands in the dough, orders still coming.</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- How it works: a real sequence, so it is numbered -->
+    <section class="how" id="how" aria-labelledby="how-title">
+      <div class="wrap how-grid">
+        <div class="how-copy">
+          <h2 id="how-title">From first ring to a confirmed booking, without you lifting a finger.</h2>
+          <ol class="steps">
+            <li>
+              <h3>A customer calls or texts</h3>
+              <p>Sophie, your AI receptionist, answers in your business's name, day or night, and from the button on your website.</p>
+            </li>
+            <li>
+              <h3>She checks your real diary</h3>
+              <p>Only times that are genuinely free are offered. Two customers can never be booked into the same slot.</p>
+            </li>
+            <li>
+              <h3>The booking lands in your calendar</h3>
+              <p>Google Calendar updates straight away, and the customer gets a text with the time and their booking reference.</p>
+            </li>
+            <li>
+              <h3>Reminders and changes look after themselves</h3>
+              <p>Reminders go out before the visit. Customers confirm, move or cancel by text, and a review request follows afterwards.</p>
+            </li>
+          </ol>
+        </div>
+        <figure class="how-media">
+          <div class="how-frame">
+            <video class="js-video js-lazy" muted loop playsinline preload="none" data-src="/media/confirm.mp4"
+                   poster="/.netlify/images?url=/media/dental-phone.png&amp;w=1200&amp;fm=webp&amp;q=80"
+                   aria-label="A SimplyBooked booking confirmation on a phone"></video>
+          </div>
+        </figure>
+      </div>
+    </section>
+
+    <!-- The dashboard -->
+    <section class="product" aria-labelledby="product-title">
+      <div class="wrap">
+        <div class="section-head section-head-split">
+          <h2 id="product-title">Your whole front desk on one screen.</h2>
+          <div>
+            <p>See every booking, call and conversation as it happens. Approve what goes out, follow up on what comes in, and know exactly how your week is filling up.</p>
+            <a class="text-link text-link-strong" href="/app.html?demo=1">Open the live demo</a>
+          </div>
+        </div>
+        <a class="product-shot" href="/app.html?demo=1" aria-label="Open the live dashboard demo">
+          <img src="/assets/dashboard.png" alt="The SimplyBooked dashboard showing today's work, bookings and pipeline" width="2400" height="1500" loading="lazy">
+        </a>
+      </div>
+    </section>
+
+    <!-- Details -->
+    <section class="details" aria-labelledby="details-title">
+      <div class="wrap details-grid">
+        <h2 id="details-title">Set up for how small teams actually work.</h2>
+        <dl class="detail-list">
+          <div><dt>Sounds like your front desk</dt><dd>Your receptionist's name, greeting, services, prices and house rules — parking, deposits, patch tests — are all yours to set.</dd></div>
+          <div><dt>Texts people actually read</dt><dd>Confirmations the moment they book, reminders the day before and on the day, and a friendly follow-up after the visit.</dd></div>
+          <div><dt>Respectful by default</dt><dd>No texts late at night or early in the morning, and anyone who replies STOP is never messaged again.</dd></div>
+          <div><dt>Holidays and time off, handled</dt><dd>Block out days, staff leave or a single chair, and those times are simply never offered.</dd></div>
+          <div><dt>Test before you go live</dt><dd>Every account starts in test mode. Messages only reach the numbers you choose until you're happy.</dd></div>
+          <div><dt>Your customers stay yours</dt><dd>Hosted securely in the EU. Only your team can see your bookings and customer details.</dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <!-- Questions -->
+    <section class="faq" id="questions" aria-labelledby="faq-title">
+      <div class="wrap faq-grid">
+        <h2 id="faq-title">Questions owners ask us</h2>
+        <div class="faq-list">
+          <details>
+            <summary>What happens if Sophie can't help a caller?</summary>
+            <p>She takes their name and number and tells them your team will call back. Medical, billing and complaint questions always go to you.</p>
+          </details>
+          <details>
+            <summary>Does it work with my calendar?</summary>
+            <p>Yes. Every booking, change and cancellation is written to your Google Calendar automatically. Time off is added in SimplyBooked, so it is never offered to customers.</p>
+          </details>
+          <details>
+            <summary>Do my customers need an app?</summary>
+            <p>No. Everything happens by phone call, the button on your website, or text message.</p>
+          </details>
+          <details>
+            <summary>Can a customer change someone else's booking?</summary>
+            <p>No. Changes are only accepted from the phone number the booking was made with, or after the caller confirms the name or reference on the booking.</p>
+          </details>
+          <details>
+            <summary>Can I try it before customers see it?</summary>
+            <p>Yes. You start in test mode, with texts going only to your own numbers, and switch to live when you're ready.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- Close -->
+    <section class="close" aria-labelledby="close-title">
+      <div class="wrap close-grid">
+        <div class="close-copy">
+          <h2 id="close-title">Let the phone ring. It's handled.</h2>
+          <p>See exactly what your customers and your team would see — bookings, messages and all.</p>
+          <div class="hero-actions">
+            <a class="btn btn-on-dark btn-lg" href="/app.html?demo=1">See the dashboard</a>
+            <a class="btn btn-outline-light btn-lg js-contact" href="#" hidden>Book a call</a>
+          </div>
+        </div>
+        <div class="close-media">
+          <img src="/.netlify/images?url=/media/calm.png&amp;w=1100&amp;fm=webp&amp;q=80" alt="A phone showing a confirmed booking on a quiet counter" loading="lazy" width="1100" height="825">
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-foot">
+    <div class="wrap site-foot-row">
+      <img src="/assets/logo.png" alt="SimplyBooked" width="122" height="32">
+      <nav aria-label="Footer">
+        <a href="#how">How it works</a>
+        <a href="#questions">Questions</a>
+        <a href="/login.html">Sign in</a>
+      </nav>
+      <p>© <span class="js-year">2026</span> SimplyBooked</p>
+    </div>
+  </footer>
+</body>
+</html>

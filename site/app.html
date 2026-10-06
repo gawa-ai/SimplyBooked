@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard — SimplyBooked</title>
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#011d3f">
+  <link rel="icon" href="/assets/icon-32.png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/assets/icon-180.png">
+  <link rel="preload" href="/assets/fonts/Inter-Regular.woff" as="font" type="font/woff" crossorigin>
+  <link rel="preload" href="/assets/fonts/InterDisplay-Bold.woff" as="font" type="font/woff" crossorigin>
+  <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/app.css">
+  <script src="/js/app.js" type="module"></script>
+</head>
+<body class="app is-loading">
+  <a class="skip-link" href="#view">Skip to content</a>
+
+  <aside class="side" id="side" aria-label="Dashboard">
+    <div class="side-top">
+      <a class="side-brand" href="/" aria-label="SimplyBooked website">
+        <img src="/assets/logo-white.png" alt="SimplyBooked" width="130" height="34">
+      </a>
+      <button class="side-close js-nav-close" type="button" aria-label="Close menu">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <nav class="side-nav" aria-label="Sections">
+      <a href="#today" data-view="today">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5L12 5l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5h-5v5H5a1 1 0 0 1-1-1z"/></svg>
+        <span>Today</span>
+      </a>
+      <a href="#pipeline" data-view="pipeline">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h4v14H4zM10 5h4v9h-4zM16 5h4v6h-4z"/></svg>
+        <span>Pipeline</span>
+      </a>
+      <a href="#approvals" data-view="approvals">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5A1.5 1.5 0 0 1 5.5 5h13A1.5 1.5 0 0 1 20 6.5v11a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5zM4.5 6l7.5 6 7.5-6"/></svg>
+        <span>Approvals</span><b class="side-count js-count-approvals" hidden></b>
+      </a>
+      <a href="#replies" data-view="replies">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></svg>
+        <span>Replies</span><b class="side-count js-count-replies" hidden></b>
+      </a>
+      <a href="#meetings" data-view="meetings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6.5h14a1 1 0 0 1 1 1V19a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7.5a1 1 0 0 1 1-1zM4 10.5h16M8.5 4v4M15.5 4v4"/></svg>
+        <span>Meetings</span>
+      </a>
+      <a href="#clients" data-view="clients">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 19c.6-3 2.8-5 5.5-5s4.9 2 5.5 5M16 11a2.5 2.5 0 1 0 0-5M17.5 14c1.9.5 3.1 2.2 3.5 5"/></svg>
+        <span>Clients</span>
+      </a>
+    </nav>
+    <div class="side-foot">
+      <p class="side-org js-org"></p>
+      <p class="side-user js-user"></p>
+      <button class="side-signout js-signout" type="button">Sign out</button>
+    </div>
+  </aside>
+  <div class="side-scrim js-nav-close" hidden></div>
+
+  <div class="main">
+    <div class="demo-bar js-demo-bar" hidden>
+      <p>You're exploring the demo with sample businesses. Nothing you do here is sent.</p>
+      <a href="/login.html">Sign in to your account</a>
+    </div>
+    <header class="topbar">
+      <button class="nav-toggle js-nav-open" type="button" aria-controls="side" aria-expanded="false">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <span class="sr-only">Open menu</span>
+      </button>
+      <div class="topbar-title">
+        <h1 class="js-view-title">Today</h1>
+        <p class="js-view-sub"></p>
+      </div>
+      <div class="topbar-tools js-tools"></div>
+    </header>
+    <main id="view" class="view" tabindex="-1" aria-live="polite" aria-busy="true"></main>
+  </div>
+
+  <dialog class="drawer js-drawer" aria-labelledby="drawer-title"></dialog>
+  <dialog class="confirm js-confirm" aria-labelledby="confirm-title"></dialog>
+  <div class="toasts" role="status" aria-live="polite"></div>
+</body>
+</html>

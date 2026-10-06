@@ -1,0 +1,14 @@
+# file  source (Higgsfield generations owned by SimplyBooked)
+hero.mp4 https://d8j0ntlcm91z4.cloudfront.net/user_3I2oLGCG11gAS4crT6Mwo8ldyKw/hf_20260914_061307_f511343b-747e-4b01-978b-947ab29fcbde.mp4
+hero-poster.png https://d8j0ntlcm91z4.cloudfront.net/user_3I2oLGCG11gAS4crT6Mwo8ldyKw/hf_20260914_060756_88314fdf-c4c4-43a8-916a-129870594d77.png
+login.mp4 https://d8j0ntlcm91z4.cloudfront.net/user_3I2oLGCG11gAS4crT6Mwo8ldyKw/hf_20260914_061307_2581a430-0d2e-482a-9fdc-7222efdf284b.mp4
+confirm.mp4 https://d8j0ntlcm91z4.cloudfront.net/user_3I2oLGCG11gAS4crT6Mwo8ldyKw/hf_20260914_071247_b37cbecd-08fc-4901-acd9-2efe0d98e9bd.mp4
+dental-phone.png https://d8j0ntlcm91z4.cloudfront.net/user_3I2oLGCG11gAS4crT6Mwo8ldyKw/hf_20260914_061030_c4eaefeb-21cc-4845-b7c7-df2c955dcde9.png
+salon-phone.png https://d8j0ntlcm91z4.cloudfront.net/user_3I2oLGCG11gAS4crT6Mwo8ldyKw/hf_20260914_061029_8d35849b-c225-45c5-ab0b-a4db9431c2f2.png
+calm.png https://d8j0ntlcm91z4.cloudfront.net/user_3I2oLGCG11gAS4crT6Mwo8ldyKw/hf_20260912_110307_49da5bb8-f5ba-4ee5-b374-5ad410e87c91.png
+barber.mp4 https://d8j0ntlcm91z4.cloudfront.net/user_3I2oLGCG11gAS4crT6Mwo8ldyKw/hf_20260912_021006_6d5d2719-66d8-41e2-a581-be5809400227.mp4
+salon.mp4 https://d8j0ntlcm91z4.cloudfront.net/user_3I2oLGCG11gAS4crT6Mwo8ldyKw/hf_20260912_021006_78d6dbf3-08bf-4ddb-a570-0a01e4f196cc.mp4
+dental.mp4 https://d8j0ntlcm91z4.cloudfront.net/user_3I2oLGCG11gAS4crT6Mwo8ldyKw/hf_20260912_021006_9cde9ecd-a579-49b8-b1e4-ae03f06f36ec.mp4
+garage.mp4 https://d8j0ntlcm91z4.cloudfront.net/user_3I2oLGCG11gAS4crT6Mwo8ldyKw/hf_20260912_021006_5b7e475b-1ce4-43a3-8993-344998668285.mp4
+optician.mp4 https://d8j0ntlcm91z4.cloudfront.net/user_3I2oLGCG11gAS4crT6Mwo8ldyKw/hf_20260912_080610_afe74ec6-d583-4cf7-aba0-40706c1a8582.mp4
+bakery.mp4 https://d8j0ntlcm91z4.cloudfront.net/user_3I2oLGCG11gAS4crT6Mwo8ldyKw/hf_20260912_080610_005ddae4-7c33-4750-b6f8-7337ad2bea21.mp4
