@@ -7,6 +7,7 @@ import { getSession, signOut } from './auth.js';
 import * as api from './api.js';
 import * as demo from './demo-data.js';
 import * as desk from './demo-frontdesk.js';
+import { TRADES, COUNTRIES } from './trades.js';
 
 const PARAMS = new URLSearchParams(location.search);
 const DEMO = PARAMS.has('demo');
@@ -139,6 +140,10 @@ const live = {
   meetings: () => api.select('v_meetings', `select=*&starts_at=gte.${encodeURIComponent(new Date(Date.now() - 14 * 864e5).toISOString())}&status=in.(scheduled,completed,no_show)&order=starts_at.asc&limit=200`),
   clients: () => api.select('v_clients', 'select=*&order=won_at.desc.nullslast&limit=200'),
   act: (name, params) => api.action(name, params),
+  // Find leads
+  searchSources: () => api.select('lead_sources', 'select=key,name,provider&active=is.true&provider=not.in.(manual,csv)&order=key.asc'),
+  searchCap: async () => Number((await api.select('system_settings', 'select=value&key=eq.max_search_runs_per_day&limit=1'))?.[0]?.value) || 20,
+  searchRuns: () => api.select('lead_search_runs', 'select=id,niche,city,region,country_code,max_results,status,found_count,new_count,dup_count,error,created_at,finished_at&order=created_at.desc&limit=40'),
   // Front desk
   portalClients: async () => (await api.rpc('portal_clients'))?.clients || [],
   overview: (client, days) => api.rpc('portal_overview', { p_client: client, p_days: days }),
@@ -147,7 +152,26 @@ const live = {
   activity: (client) => api.rpc('portal_activity', { p_client: client, p_limit: 40 }),
 };
 
-const demoStore = { leads: clone(demo.leads), outreach: clone(demo.outreach), replies: clone(demo.replies), meetings: clone(demo.meetings), clients: clone(demo.clients) };
+const demoStore = { leads: clone(demo.leads), outreach: clone(demo.outreach), replies: clone(demo.replies), meetings: clone(demo.meetings), clients: clone(demo.clients),
+  runs: clone(demo.searchRuns) };
+const demoId = () => (crypto.randomUUID ? crypto.randomUUID() : `demo-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+/** Demo searches move from waiting to searching to done over a few seconds, then "find" fictional businesses. */
+function advanceDemoRuns() {
+  for (const r of demoStore.runs) {
+    if (!r._t || r.status === 'completed') continue;
+    const age = Date.now() - r._t;
+    if (age < 3000) r.status = 'queued';
+    else if (age < 8000) r.status = 'running';
+    else {
+      const seed = [...`${r.niche}${r.city}`].reduce((a, c) => a + c.charCodeAt(0), 0);
+      r.found_count = Math.min(r.max_results, 9 + (seed % 23));
+      r.dup_count = Math.round(r.found_count * 0.18);
+      r.new_count = r.found_count - r.dup_count;
+      r.status = 'completed'; r.finished_at = new Date().toISOString();
+      demoStore.leads.push(...demo.foundLeads(r.niche, r.city, r.new_count));
+    }
+  }
+}
 const sample = {
   async me() { await wait(120); return { profile: demo.profile, org: { ...demo.organization, outreach_enabled: true } }; },
   async metrics(days) {
@@ -175,8 +199,36 @@ const sample = {
     }
     if (name === 'mark_reply_handled') { const r = demoStore.replies.find((x) => x.id === p.reply_id); if (r) r.handled_at = new Date().toISOString(); }
     if (name === 'set_meeting_outcome') { const m = demoStore.meetings.find((x) => x.id === p.meeting_id); if (m) m.status = p.status; }
+    if (name === 'queue_search_run') {
+      advanceDemoRuns();
+      const same = demoStore.runs.find((r) => ['queued', 'running'].includes(r.status) && r.niche.toLowerCase() === p.niche.toLowerCase()
+        && (r.city || '').toLowerCase() === (p.city || '').toLowerCase() && r.country_code === p.country);
+      if (same) return { ok: true, run_id: same.id, duplicate: true, demo: true };
+      const run = { id: demoId(), niche: p.niche, city: p.city || null, region: p.region || null, country_code: p.country, max_results: p.max_results,
+        status: 'queued', found_count: 0, new_count: 0, dup_count: 0, error: null, created_at: new Date().toISOString(), finished_at: null, _t: Date.now() };
+      demoStore.runs.unshift(run);
+      return { ok: true, run_id: run.id, demo: true };
+    }
+    if (name === 'import_leads') {
+      const res = { ok: true, received: p.items.length, created: 0, merged: 0, duplicate: 0, suppressed: 0, invalid: 0, limited: 0, demo: true };
+      const key = (x) => `${String(x.business_name || '').trim().toLowerCase()}|${String(x.city || '').trim().toLowerCase()}`;
+      const known = new Set(demoStore.leads.map(key));
+      for (const it of p.items) {
+        if (!String(it.business_name || '').trim()) { res.invalid++; continue; }
+        if (known.has(key(it))) { res.duplicate++; continue; }
+        known.add(key(it));
+        demoStore.leads.push({ id: demoId(), business_name: it.business_name.trim(), niche: it.niche || null, city: it.city || null, status: 'new_lead', score: null,
+          website: it.website || null, phone: it.phone || null, email: it.email || null, do_not_contact: false, updated_at: new Date().toISOString() });
+        res.created++;
+      }
+      return res;
+    }
     return { ok: true, demo: true };
   },
+  // Find leads
+  async searchSources() { await wait(100); return [{ key: 'osm', name: 'OpenStreetMap', provider: 'osm_overpass' }]; },
+  async searchCap() { return 20; },
+  async searchRuns() { await wait(140); advanceDemoRuns(); return clone(demoStore.runs).map(({ _t, ...r }) => r); },
   // Front desk
   portalClients: async () => [clone(desk.client)],
   overview: (_c, days) => desk.overview(days),
@@ -196,6 +248,7 @@ const VIEWS = {
   calendar: { group: 'desk', title: 'Calendar', sub: () => state.client?.business_name || '', render: renderCalendar },
   activity: { group: 'desk', title: 'Calls and texts', sub: () => `What ${state.receptionist || 'your receptionist'} handled for ${state.client?.business_name || 'you'}`, render: renderActivity },
   sales: { group: 'growth', title: 'Sales', sub: () => (state.org?.name ? `${state.org.name} at a glance` : 'Your pipeline at a glance'), render: renderToday },
+  leads: { group: 'growth', title: 'Find leads', sub: () => 'Search a town for businesses that fit, or bring your own list', render: renderFind },
   pipeline: { group: 'growth', title: 'Pipeline', sub: () => 'Every business you\'re talking to, by stage', render: renderPipeline },
   approvals: { group: 'growth', title: 'Approvals', sub: () => 'Nothing is sent until you approve it', render: renderApprovals },
   replies: { group: 'growth', title: 'Replies', sub: () => 'Answers from businesses you\'ve contacted', render: renderReplies },
@@ -396,7 +449,8 @@ async function renderPipeline(current) {
   const leads = await src.leads();
   if (!current()) return;
   if (!leads.length) {
-    view.replaceChildren(empty('No leads yet', 'Import a list of businesses or run a search, and they\'ll appear here sorted by how well they fit.'));
+    view.replaceChildren(empty('No leads yet', 'Search a town or import a list of businesses, and they\'ll appear here sorted by how well they fit.',
+      h('a', { class: 'btn btn-primary', href: '#leads', text: 'Find leads' })));
     return;
   }
   const search = h('input', { class: 'input', type: 'search', placeholder: 'Find a business, trade or town', 'aria-label': 'Find a lead', value: state.leadFilter });
@@ -719,6 +773,307 @@ async function renderClients(current) {
         h('td', { class: 'r', text: c.won_at ? fmt({ day: 'numeric', month: 'short' }).format(new Date(c.won_at)) : '—' }));
     })));
   view.replaceChildren(h('div', { class: 'panel' }, h('div', { class: 'panel-body table-wrap' }, table)));
+}
+
+/* ------------------------------------------------------------------ Find leads */
+
+const RUN_STATUS = { queued: ['Waiting', 'pill-amber'], running: ['Searching', 'pill-blue'], completed: ['Done', 'pill-mint'],
+  failed: ['Didn\'t work', 'pill-red'], cancelled: ['Cancelled', ''] };
+const COUNTRY_NAME = Object.fromEntries(COUNTRIES);
+const PREFS_KEY = 'simplybooked.search';
+const ICON_SEARCH = 'M10.5 17.5a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM15.6 15.6L20 20';
+const ICON_PIN = 'M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11zM12 12.2a2.2 2.2 0 1 0 0-4.4 2.2 2.2 0 0 0 0 4.4z';
+const ICON_ALERT = 'M12 4l9 16H3zM12 10v4.5M12 17.2v.1';
+const ICON_FILE = 'M7 3.5h7l4 4V20a.5.5 0 0 1-.5.5h-10A.5.5 0 0 1 7 20zM14 3.5V8h4M9.5 13h5M9.5 16.5h5';
+const ICON_INFO = 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 11v5.5M12 7.8v.1';
+const tradeLabel = (niche) => TRADES.find((t) => t.niche.toLowerCase() === String(niche || '').toLowerCase())?.label || titleCase(niche || '');
+
+/** Plain-English reason for a failed search (codes come from the Lead Finder workflow). */
+function runProblem(code) {
+  const e = String(code || '');
+  if (e.startsWith('unsupported_niche')) return 'The map search doesn\'t know this trade. Pick one from the list.';
+  if (e === 'city_or_region_required') return 'Add a town or region and search again.';
+  if (e === 'invalid_country') return 'The country wasn\'t recognised.';
+  if (/^overpass_http_(429|502|503|504|none)$/.test(e)) return 'The map service was busy. Search again in a few minutes.';
+  if (e.startsWith('overpass_http_')) return 'The map service didn\'t answer properly. Search again later.';
+  if (e.startsWith('provider_not_configured')) return 'This search source isn\'t connected yet.';
+  if (e === 'source_inactive') return 'The search source was switched off before it ran.';
+  if (e === 'max_attempts') return 'It failed three times in a row, so it was stopped.';
+  if (e === 'ingest_failed') return 'Businesses were found but couldn\'t be saved. Search again.';
+  return 'Something went wrong with this search. Search again.';
+}
+
+/* --- CSV import: read a spreadsheet export into lead items (nothing is sent until the person confirms) */
+
+const CSV_COLUMNS = {
+  business_name: ['business name', 'business', 'name', 'company', 'company name', 'organisation', 'organization', 'practice', 'practice name'],
+  website: ['website', 'web', 'url', 'site', 'website url', 'domain', 'web address'],
+  phone: ['phone', 'telephone', 'tel', 'phone number', 'telephone number', 'mobile', 'contact number'],
+  email: ['email', 'e mail', 'email address'],
+  city: ['town', 'city', 'town city', 'locality'],
+  region: ['region', 'county', 'state', 'province'],
+  address: ['address', 'street address', 'full address', 'address line 1'],
+  niche: ['trade', 'niche', 'industry', 'category', 'type', 'business type', 'sector'],
+  country_code: ['country', 'country code'],
+};
+const CSV_LIMITS = { business_name: 200, website: 500, phone: 40, email: 254, city: 80, region: 80, address: 300, niche: 80 };
+const UK_NAMES = new Set(['united kingdom', 'uk', 'great britain', 'britain', 'england', 'scotland', 'wales', 'northern ireland', 'gb']);
+const MAX_IMPORT_ROWS = 1000;
+
+function parseCsv(text) {
+  const src = text.replace(/^﻿/, '');
+  const first = src.slice(0, src.search(/\r?\n|$/));
+  const count = (ch) => { let n = 0, q = false; for (const c of first) { if (c === '"') q = !q; else if (c === ch && !q) n++; } return n; };
+  const delim = [',', ';', '\t'].reduce((best, ch) => (count(ch) > count(best) ? ch : best), ',');
+  const rows = []; let row = [], cur = '', q = false;
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (q) {
+      if (c === '"' && src[i + 1] === '"') { cur += '"'; i++; } else if (c === '"') q = false; else cur += c;
+    } else if (c === '"') q = true;
+    else if (c === delim) { row.push(cur); cur = ''; }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && src[i + 1] === '\n') i++; row.push(cur); rows.push(row); row = []; cur = ''; }
+    else cur += c;
+  }
+  if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+  return rows.filter((r) => r.some((v) => v.trim() !== ''));
+}
+
+/** Returns { items, skipped, columns, error } from CSV text. */
+function csvToLeads(text) {
+  const rows = parseCsv(text);
+  if (rows.length < 2) return { error: 'The file needs a header row and at least one business.' };
+  const norm = (s) => s.toLowerCase().replace(/[_\-/]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const head = rows[0].map(norm);
+  const index = {};
+  for (const [field, names] of Object.entries(CSV_COLUMNS)) {
+    const i = head.findIndex((x) => names.includes(x));
+    if (i >= 0) index[field] = i;
+  }
+  if (index.business_name === undefined) return { error: 'We couldn\'t find a business name column. Name the column "Business name".' };
+  const body = rows.slice(1);
+  if (body.length > MAX_IMPORT_ROWS) return { error: `Up to ${int(MAX_IMPORT_ROWS)} businesses per file. This one has ${int(body.length)}. Split it and import the parts one after another.` };
+  const items = []; let skipped = 0;
+  for (const r of body) {
+    const it = {};
+    for (const [field, i] of Object.entries(index)) {
+      const v = String(r[i] ?? '').trim();
+      if (!v) continue;
+      if (field === 'country_code') {
+        const c = v.toLowerCase();
+        if (/^[a-z]{2}$/.test(c)) it.country_code = c === 'uk' ? 'GB' : c.toUpperCase();
+        else if (UK_NAMES.has(c)) it.country_code = 'GB';
+        else { const hit = COUNTRIES.find(([, name]) => name.toLowerCase() === c); if (hit) it.country_code = hit[0]; }
+        continue;
+      }
+      it[field] = v.slice(0, CSV_LIMITS[field]);
+    }
+    if (!it.business_name) { skipped++; continue; }
+    items.push(it);
+  }
+  return { items, skipped, columns: Object.keys(index) };
+}
+
+async function renderFind(current) {
+  loading(2);
+  const [sources, cap, firstRuns] = await Promise.all([src.searchSources(), src.searchCap().catch(() => 20), src.searchRuns()]);
+  if (!current()) return;
+  let runs = firstRuns;
+  const canWrite = DEMO || ['member', 'admin', 'owner'].includes(state.profile?.role);
+  const source = sources.find((x) => x.key === 'osm') || sources[0] || null;
+  let prefs = {};
+  try { prefs = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}') || {}; } catch { prefs = {}; }
+
+  /* --- new search form */
+  const opt = (value, text, sel) => h('option', { value, text, selected: sel });
+  const trade = h('select', { class: 'select', id: 'f-trade', required: true },
+    opt('', 'Choose a trade', !prefs.niche), TRADES.map((t) => opt(t.niche, t.label, t.niche === prefs.niche)));
+  const city = h('input', { class: 'input', id: 'f-city', required: true, minlength: '2', maxlength: '80', autocomplete: 'off', placeholder: 'For example, Bristol', value: prefs.city || '' });
+  const region = h('input', { class: 'input', id: 'f-region', maxlength: '80', autocomplete: 'off', placeholder: 'Optional', value: prefs.region || '' });
+  const country = h('select', { class: 'select', id: 'f-country' }, COUNTRIES.map(([c, n]) => opt(c, n, c === (prefs.country || 'GB'))));
+  const howMany = h('select', { class: 'select', id: 'f-max' }, [10, 20, 40, 60].map((n) => opt(String(n), `Up to ${n}`, n === (prefs.max || 20))));
+  const go = h('button', { class: 'btn btn-primary', type: 'submit' }, svg(ICON_SEARCH, 18), 'Search');
+  const field = (label, input, hint) => h('div', { class: 'field' }, h('label', { class: 'label', for: input.id }, label, hint ? h('span', { class: 'field-hint', text: ` ${hint}` }) : null), input);
+
+  const todayKey = dayKey(new Date());
+  const usedToday = () => runs.filter((r) => dayKey(new Date(r.created_at)) === todayKey).length;
+  const meterFill = h('span', { class: 'meter-fill' });
+  const meterText = h('span', { class: 'meter-text' });
+  const meter = h('div', { class: 'meter', role: 'img' }, h('span', { class: 'meter-track' }, meterFill), meterText);
+  const drawMeter = () => {
+    const used = Math.min(usedToday(), cap);
+    meterFill.style.width = `${Math.round((used / cap) * 100)}%`;
+    meterText.textContent = `${used} of ${cap} searches today`;
+    meter.setAttribute('aria-label', `${used} of ${cap} searches used today`);
+    meter.classList.toggle('is-full', used >= cap);
+  };
+
+  const form = h('form', { class: 'panel find', 'aria-labelledby': 'find-title', novalidate: true },
+    h('div', { class: 'find-head' },
+      h('div', {}, h('h2', { id: 'find-title', text: 'Search a town' }),
+        h('p', { text: 'We look up every business of that trade on the map and add the new ones to your pipeline.' })),
+      meter),
+    h('div', { class: 'find-grid' },
+      field('Trade', trade), field('Town or city', city), field('County or region', region, '(optional)'),
+      field('Country', country), field('How many', howMany), h('div', { class: 'field field-go' }, go)),
+    h('p', { class: 'find-note' }, svg(ICON_INFO, 18),
+      h('span', { text: 'Businesses come from OpenStreetMap, the open map of the world. New ones arrive as New lead and are scored for fit automatically. Nobody is contacted until you approve an email.' })));
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    for (const el of [trade, city]) el.removeAttribute('aria-invalid');
+    const c = city.value.trim(), r = region.value.trim();
+    const bad = !trade.value ? trade : c.length < 2 ? city : null;
+    if (bad) { bad.setAttribute('aria-invalid', 'true'); bad.focus(); toast(bad === trade ? 'Choose a trade to search for.' : 'Type the town or city to search.', true); return; }
+    withBusy(go, async () => {
+      const params = { source_key: source.key, niche: trade.value, city: c, country: country.value, max_results: Number(howMany.value), ...(r ? { region: r } : {}) };
+      let res;
+      try { res = await src.act('queue_search_run', params); }
+      catch (err) {
+        if (err?.code === 'daily_search_cap') throw new Error(`You've used all ${cap} searches for today. More are available tomorrow.`);
+        throw err;
+      }
+      try { localStorage.setItem(PREFS_KEY, JSON.stringify({ niche: trade.value, city: c, region: r, country: country.value, max: Number(howMany.value) })); } catch { /* ignore */ }
+      toast(res?.duplicate ? `${tradeLabel(trade.value)} in ${c} is already waiting to run.` : `Searching for ${tradeLabel(trade.value).toLowerCase()} in ${c}. Results appear below in a few minutes.`);
+      await refresh();
+    });
+  });
+  if (!canWrite || !source) {
+    for (const el of form.querySelectorAll('select, input, button')) el.disabled = true;
+  }
+
+  /* --- recent searches */
+  const runsBody = h('div', { class: 'panel-body' });
+  const runsPanel = h('section', { class: 'panel runs-panel', 'aria-labelledby': 'runs-title' },
+    h('div', { class: 'panel-head' }, h('h2', { id: 'runs-title', text: 'Recent searches' }), h('span', { class: 'muted js-runs-count' })),
+    runsBody);
+
+  const runRow = (r) => {
+    const [label, tone] = RUN_STATUS[r.status] || [titleCase(r.status), ''];
+    const place = [r.city, r.region].filter(Boolean).join(', ');
+    const where = [COUNTRY_NAME[r.country_code] || r.country_code, `up to ${r.max_results}`, ago(r.created_at)].join(' · ');
+    let result;
+    if (r.status === 'completed') {
+      result = r.found_count ? h('div', { class: 'run-stats' },
+        h('span', {}, h('b', { text: int(r.found_count) }), ' found'),
+        h('span', { class: 'is-new' }, h('b', { text: int(r.new_count) }), ' new'),
+        r.dup_count ? h('span', {}, h('b', { text: int(r.dup_count) }), ' already known') : null)
+        : h('p', { class: 'run-text', text: 'No businesses of this trade on the map there. Try a bigger town or a nearby one.' });
+    } else if (r.status === 'failed') result = h('p', { class: 'run-text is-bad', text: runProblem(r.error) });
+    else if (r.status === 'running') result = h('p', { class: 'run-text', text: 'Looking on the map now.' });
+    else if (r.status === 'queued') result = h('p', { class: 'run-text', text: 'Starts within five minutes.' });
+    else result = h('p', { class: 'run-text', text: 'Stopped before it ran.' });
+
+    const open = r.status === 'completed' && r.new_count > 0
+      ? h('a', { class: 'btn btn-sm btn-quiet', href: '#pipeline', text: 'View', 'aria-label': `View ${tradeLabel(r.niche).toLowerCase()} in ${place} in the pipeline`,
+        onClick: () => { state.leadFilter = r.city || r.region || ''; } })
+      : null;
+    const active = r.status === 'queued' || r.status === 'running';
+    return h('li', { class: `run is-${r.status}${active ? ' is-active' : ''}` },
+      h('span', { class: 'run-icon', 'aria-hidden': 'true' }, svg(r.status === 'failed' ? ICON_ALERT : ICON_PIN, 20)),
+      h('div', { class: 'run-what' }, h('b', { text: `${tradeLabel(r.niche)} in ${place || 'the whole country'}` }), h('span', { text: where })),
+      h('div', { class: 'run-result' }, result),
+      h('div', { class: 'run-side' }, h('span', { class: `pill ${tone}`, text: label }), open));
+  };
+
+  const drawRuns = () => {
+    drawMeter();
+    $('.js-runs-count', runsPanel).textContent = runs.length ? `${int(runs.length)} most recent` : '';
+    if (!runs.length) {
+      runsBody.replaceChildren(h('div', { class: 'runs-empty' }, svg(ICON_PIN, 28), h('p', { text: 'Your searches show up here, with how many new businesses each one found.' })));
+      return;
+    }
+    const stale = !DEMO && runs.some((r) => r.status === 'queued' && Date.now() - Date.parse(r.created_at) > 15 * 60e3);
+    runsBody.replaceChildren(...[
+      stale ? h('div', { class: 'notice', role: 'status' }, svg(ICON_ALERT, 18),
+        h('p', { text: 'Searches are waiting to be picked up. The lead finder automation isn\'t running yet; they\'ll start on their own as soon as it is.' })) : null,
+      h('ul', { class: 'runs', role: 'list' }, runs.map(runRow))].filter(Boolean));
+  };
+
+  let timer = 0;
+  const refresh = async () => {
+    clearTimeout(timer);
+    if (!current()) return;
+    try { runs = await src.searchRuns(); } catch (err) { if (err?.code === 'unauthenticated') { location.replace('/login.html'); return; } }
+    if (!current()) return;
+    drawRuns();
+    if (runs.some((r) => r.status === 'queued' || r.status === 'running')) timer = setTimeout(refresh, DEMO ? 2000 : 20000);
+  };
+
+  /* --- bring your own list */
+  const file = h('input', { class: 'sr-only', type: 'file', id: 'f-csv', accept: '.csv,text/csv' });
+  const drop = h('label', { class: 'drop', for: 'f-csv' }, h('span', { class: 'drop-icon', 'aria-hidden': 'true' }, svg(ICON_FILE, 22)),
+    h('span', {}, h('b', { text: 'Choose a CSV file' }), h('span', { text: 'or drop it here. Up to 1,000 businesses.' })));
+  const preview = h('div', { class: 'import-preview', hidden: true });
+  const importPanel = h('section', { class: 'panel import', 'aria-labelledby': 'import-title' },
+    h('div', { class: 'panel-head' }, h('h2', { id: 'import-title', text: 'Bring your own list' })),
+    h('div', { class: 'panel-body' },
+      h('p', { class: 'muted', text: 'Export a spreadsheet as CSV. We read the business name (required), website, phone, email, town, region, address and trade. Duplicates are merged with what you already have.' }),
+      h('div', { class: 'drop-wrap' }, file, drop), preview));
+
+  const showFile = async (f) => {
+    if (!f) return;
+    if (!/\.csv$/i.test(f.name) && f.type !== 'text/csv') { toast('Choose a .csv file. In Excel or Google Sheets, use Download or Save as CSV.', true); return; }
+    if (f.size > 2 * 1024 * 1024) { toast('That file is over 2 MB. Split it into smaller files.', true); return; }
+    let parsed;
+    try { parsed = csvToLeads(await f.text()); } catch { parsed = { error: 'We couldn\'t read that file.' }; }
+    if (!current()) return;
+    if (parsed.error) { preview.hidden = false; preview.replaceChildren(h('p', { class: 'run-text is-bad', role: 'alert', text: parsed.error })); return; }
+    const n = parsed.items.length;
+    const go2 = h('button', { class: 'btn btn-sm btn-primary', type: 'button', text: `Import ${int(n)} business${n === 1 ? '' : 'es'}`, disabled: !n || !canWrite });
+    const cancel = h('button', { class: 'btn btn-sm btn-quiet', type: 'button', text: 'Cancel', onClick: () => { preview.hidden = true; preview.replaceChildren(); file.value = ''; } });
+    const progress = h('p', { class: 'muted', role: 'status' });
+    preview.hidden = false;
+    preview.replaceChildren(
+      h('p', {}, h('b', { text: f.name }), `: ${int(n)} business${n === 1 ? '' : 'es'} ready to import.`,
+        parsed.skipped ? ` ${int(parsed.skipped)} row${parsed.skipped === 1 ? '' : 's'} without a business name will be skipped.` : ''),
+      h('p', { class: 'faint', text: `Columns found: ${parsed.columns.map((c) => c.replace('_code', '').replace('_', ' ')).join(', ')}` }),
+      h('div', { class: 'msg-actions' }, go2, cancel), progress);
+    go2.addEventListener('click', () => withBusy(go2, async () => {
+      cancel.disabled = true;
+      const total = { created: 0, merged: 0, duplicate: 0, suppressed: 0, invalid: 0, limited: 0 };
+      let sent = 0;
+      try {
+        for (let i = 0; i < n; i += 200) {
+          progress.textContent = `Importing ${int(Math.min(i + 200, n))} of ${int(n)}…`;
+          const res = await src.act('import_leads', { items: parsed.items.slice(i, i + 200), source_key: 'csv' });
+          for (const k of Object.keys(total)) total[k] += Number(res?.[k]) || 0;
+          sent = Math.min(i + 200, n);
+        }
+      } catch (err) {
+        if (sent) err.message = `${int(sent)} of ${int(n)} were imported before this stopped: ${err.message}`;
+        progress.textContent = '';
+        cancel.disabled = false;
+        throw err;
+      }
+      const lines = [
+        `${int(total.created)} new business${total.created === 1 ? '' : 'es'} added to your pipeline as New lead.`,
+        total.merged + total.duplicate ? `${int(total.merged + total.duplicate)} were already there${total.merged ? ` (${int(total.merged)} updated with new details)` : ''}.` : null,
+        total.suppressed ? `${int(total.suppressed)} are on your do-not-contact list and were left out.` : null,
+        total.limited ? `${int(total.limited)} were over today's limit for imports and weren't added. Import them again tomorrow.` : null,
+        total.invalid ? `${int(total.invalid)} couldn't be read.` : null,
+      ].filter(Boolean);
+      file.value = '';
+      preview.replaceChildren(h('div', { class: 'import-done', role: 'status' }, svg(ICON_CHECK, 20), h('div', {}, lines.map((t) => h('p', { text: t })))),
+        total.created ? h('a', { class: 'btn btn-sm btn-quiet', href: '#pipeline', text: 'Open the pipeline', onClick: () => { state.leadFilter = ''; } }) : null);
+      toast(`${int(total.created)} new lead${total.created === 1 ? '' : 's'} imported.`);
+      invalidate();
+    }));
+  };
+  file.addEventListener('change', () => showFile(file.files?.[0]));
+  drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('is-over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('is-over'));
+  drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('is-over'); if (canWrite) showFile(e.dataTransfer?.files?.[0]); });
+  if (!canWrite) { file.disabled = true; drop.classList.add('is-disabled'); }
+
+  const blocked = !source
+    ? h('div', { class: 'notice', role: 'status' }, svg(ICON_ALERT, 18), h('p', { text: 'Map search isn\'t switched on for your organisation yet. Ask the account owner to turn on the OpenStreetMap source.' }))
+    : !canWrite ? h('div', { class: 'notice', role: 'status' }, svg(ICON_INFO, 18), h('p', { text: 'Your role can view searches but not start them or import lists. Ask the account owner if you need to.' }))
+      : null;
+
+  view.replaceChildren(h('div', { class: 'find-wrap' }, blocked, form, h('div', { class: 'find-cols' }, runsPanel, importPanel)));
+  drawRuns();
+  if (runs.some((r) => r.status === 'queued' || r.status === 'running')) timer = setTimeout(refresh, DEMO ? 2000 : 20000);
 }
 
 /* ================================================================== Front desk */

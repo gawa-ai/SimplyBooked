@@ -6,7 +6,7 @@ Static site deployed by Netlify (`netlify.toml` at the repo root, publish folder
 |---|---|
 | `index.html` | Landing page |
 | `login.html` | Sign in: password, emailed sign-in link, and password reset |
-| `app.html` | Dashboard. **Front desk** (Overview, Calendar, Calls and texts) for a business's own bookings; **Growth** (Sales, Pipeline, Approvals, Replies, Meetings, Clients) for the SimplyBooked team |
+| `app.html` | Dashboard. **Front desk** (Overview, Calendar, Calls and texts) for a business's own bookings; **Growth** (Sales, Find leads, Pipeline, Approvals, Replies, Meetings, Clients) for the SimplyBooked team |
 | `app.html?demo=1` | Front desk of a fictional barbershop, for showing prospects. Nothing is saved or sent. |
 | `app.html?demo=sales` | Front desk plus the Growth screens, with sample data |
 

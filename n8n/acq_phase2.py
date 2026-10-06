@@ -17,6 +17,13 @@ const TAGS = {
   massage: ['shop=massage'], gym: ['leisure=fitness_centre'], fitness: ['leisure=fitness_centre'],
   garage: ['shop=car_repair'], mechanic: ['shop=car_repair'], carrepair: ['shop=car_repair'],
   vet: ['amenity=veterinary'], veterinary: ['amenity=veterinary'], optician: ['shop=optician'], tattoo: ['shop=tattoo'],
+  // multi-word trades as typed or picked on the Find leads screen (letters only, trailing "s" dropped)
+  dentalpractice: ['amenity=dentist'], dentalclinic: ['amenity=dentist'], dentalsurgery: ['amenity=dentist'],
+  podiatrist: ['healthcare=podiatrist'], chiropodist: ['healthcare=podiatrist'],
+  barbershop: ['shop=hairdresser'], beautysalon: ['shop=beauty'],
+  nailsalon: ['shop=beauty'], nailbar: ['shop=beauty'], massagetherapist: ['shop=massage'],
+  tattoostudio: ['shop=tattoo'], tattooparlour: ['shop=tattoo'], tattooparlor: ['shop=tattoo'],
+  petgroomer: ['shop=pet_grooming'], doggroomer: ['shop=pet_grooming'], drivingschool: ['amenity=driving_school'],
 };
 const tags = TAGS[key];
 const bad = error => ({ json: { run, query: '', error } });

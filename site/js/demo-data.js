@@ -157,3 +157,35 @@ export function metrics(days = 90) {
 
 export const profile = { email: 'demo@simplybooked.co.uk', full_name: 'Jay', role: 'owner' };
 export const organization = { name: 'SimplyBooked', timezone: 'Europe/London', outreach_enabled: false };
+
+// Find leads: recent map searches, and the made-up businesses a demo search "finds".
+export const searchRuns = [
+  { id: id(), niche: 'Dentists', city: 'Bristol', region: null, country_code: 'GB', max_results: 40, status: 'completed',
+    found_count: 31, new_count: 24, dup_count: 7, error: null, created_at: at(-2 * D - 3 * H), finished_at: at(-2 * D - 3 * H + 140e3) },
+  { id: id(), niche: 'Hair salons', city: 'Leeds', region: null, country_code: 'GB', max_results: 20, status: 'completed',
+    found_count: 20, new_count: 18, dup_count: 2, error: null, created_at: at(-4 * D - 6 * H), finished_at: at(-4 * D - 6 * H + 95e3) },
+  { id: id(), niche: 'Tattoo studios', city: 'Bath', region: null, country_code: 'GB', max_results: 20, status: 'failed',
+    found_count: 0, new_count: 0, dup_count: 0, error: 'overpass_http_429', created_at: at(-5 * D - 2 * H), finished_at: at(-5 * D - 2 * H + 60e3) },
+  { id: id(), niche: 'Garages', city: 'Sheffield', region: 'South Yorkshire', country_code: 'GB', max_results: 60, status: 'completed',
+    found_count: 47, new_count: 41, dup_count: 6, error: null, created_at: at(-9 * D - 4 * H), finished_at: at(-9 * D - 4 * H + 210e3) },
+];
+
+const PLACES = ['Hillside', 'Market Street', 'Riverside', 'Parkview', 'Old Town', 'Kingsway', 'Station Road', 'Westgate', 'Abbey', 'Elm Tree',
+  'Highfield', 'Northgate', 'Victoria', 'Mill Lane', 'Castle', 'Orchard', 'Bridge Street', 'Southside', 'Church Lane', 'Meadow'];
+const NOUN = { Dentists: 'Dental', Doctors: 'Medical Centre', Clinics: 'Clinic', Physiotherapists: 'Physio', Podiatrists: 'Podiatry',
+  Opticians: 'Opticians', 'Hair salons': 'Hair', Barbers: 'Barbers', 'Beauty salons': 'Beauty', 'Nail salons': 'Nails', Spas: 'Spa',
+  'Massage therapists': 'Massage', Gyms: 'Fitness', 'Tattoo studios': 'Tattoo', Garages: 'Motors', Vets: 'Vets', 'Pet groomers': 'Pet Grooming',
+  'Driving schools': 'Driving School' };
+/** Fictional businesses for a demo search; same input, same names. */
+export function foundLeads(niche, city, count) {
+  const out = [];
+  const offset = [...`${niche}${city}`].reduce((s, c) => s + c.charCodeAt(0), 0);
+  for (let i = 0; i < count; i++) {
+    const name = `${PLACES[(offset + i * 7) % PLACES.length]} ${NOUN[niche] || niche}${i >= PLACES.length ? ` ${Math.floor(i / PLACES.length) + 1}` : ''}`;
+    out.push(lead(name, niche.toLowerCase(), city, 'new_lead', null, {
+      fit: null, is_fit: null, reasons: [], pain_points: [], recommended_offer: null, website_quality: null, has_online_booking: null,
+      rating: null, review_count: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      qualification_summary: null, email: i % 3 ? null : `hello@${name.toLowerCase().replace(/[^a-z0-9]+/g, '')}.co.uk` }));
+  }
+  return out;
+}

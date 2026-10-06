@@ -8,12 +8,15 @@ $P -d acqall -f tests/00_stub.sql >/dev/null 2>&1 || { echo STUB_FAILED; exit 1;
 for f in 020_acq_schema 021_acq_leads_crm 022_acq_outreach 023_acq_replies_demos_meetings 024_acq_followups_onboarding_metrics; do
   $P -d acqall -f "$f.sql" >/dev/null 2>/tmp/acq_mig_err.txt || { echo "MIGRATION_FAILED $f"; cat /tmp/acq_mig_err.txt; exit 1; }
 done
-for n in 1 2 3 4 5 6 7; do
+for n in 1 2 3 4 5 6 7 8; do
   if [ "$n" = 6 ]; then   # 025 needs the bos schema, which phase 5 installs (as in production); applied twice to prove it is re-runnable
     for i in 1 2; do $P -d acqall -f 025_acq_client_portal.sql >/dev/null 2>/tmp/acq_mig_err.txt || { echo "MIGRATION_FAILED 025 (run $i)"; cat /tmp/acq_mig_err.txt; exit 1; }; done
   fi
   if [ "$n" = 7 ]; then
     for i in 1 2; do $P -d acqall -f 026_acq_portal_hardening.sql >/dev/null 2>/tmp/acq_mig_err.txt || { echo "MIGRATION_FAILED 026 (run $i)"; cat /tmp/acq_mig_err.txt; exit 1; }; done
+  fi
+  if [ "$n" = 8 ]; then
+    for i in 1 2; do $P -d acqall -f 027_acq_lead_search_source.sql >/dev/null 2>/tmp/acq_mig_err.txt || { echo "MIGRATION_FAILED 027 (run $i)"; cat /tmp/acq_mig_err.txt; exit 1; }; done
   fi
   out=$($P -d acqall -f "tests/p$n.sql" 2>&1)
   echo "$out" | grep -v "PASS" | grep -E "FAIL|ERROR|[Ee]rror" | sed 's/^psql:[^ ]* //'

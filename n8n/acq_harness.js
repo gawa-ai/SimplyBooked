@@ -127,6 +127,15 @@ const run6 = queueRun('gp', 'dentist', 'Leeds');
 o = lfRun(() => ({ statusCode: 200, body: { elements: [] } }));
 check(o[0].run.provider === 'google_places' && sql(`select error from acq.lead_search_runs where id='${run6}'`) === 'provider_not_configured:google_places', 'LF12 providers that are not wired yet fail clearly (placeholder)');
 
+// every trade offered on the dashboard's Find leads screen must turn into a real Overpass query
+const TRADES = new Function(fs.readFileSync(__dirname + '/../site/js/trades.js', 'utf8')
+  .replace(/export const COUNTRIES[\s\S]*$/, '').replace('export const TRADES =', 'return'))();
+const unmapped = TRADES.filter(t => {
+  const b = runCode(nodeOf(lf, 'Build Overpass Query'), { run: { niche: t.niche, city: 'Bristol', region: '', country_code: 'GB', max_results: 20 } });
+  return b.error || !/nwr\["[a-z_]+"="[a-z_]+"\]\(area\.c\)\(area\.a\);/.test(b.query);
+}).map(t => t.niche);
+check(TRADES.length >= 15 && unmapped.length === 0, `LF13 all ${TRADES.length} trades on the Find leads screen map to OpenStreetMap tags`, unmapped);
+
 // ================================================================ QUALIFICATION
 const qa = load('11-ACQ-Qualification.json');
 const claimLeads = () => runPg(nodeOf(qa, 'Claim Leads').parameters.query, []).map(r => r.lead);

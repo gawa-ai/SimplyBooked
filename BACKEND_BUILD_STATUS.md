@@ -129,3 +129,10 @@ Live acceptance (do in this order, `outreach_enabled = false` until step 4):
 - VERIFIED: migration 025_acq_client_portal applied to prod (acq_025_client_portal); 40 new checks pass locally (db/tests/p6.sql) on top of the 480 existing ones; anon has no execute on any acq function; client_users has RLS.
 - Found and fixed during testing: a NULL comparison in the access check would have let a signed-in client user through. Covered by test 605.
 - NOT TESTED LIVE: portal RPCs against real bookings (prod has no bos data yet).
+
+## 2026-10-06 — Find leads screen
+- Dashboard Growth → **Find leads** (`#leads`): search a town for a trade (queues `queue_search_run` on the `osm` source), recent searches with status / found / new / already known and plain-English failure reasons, a daily-usage meter (`max_search_runs_per_day`), and CSV import (`import_leads`, batches of 200, max 1,000 rows, parsed in the browser; nothing is sent until confirmed). Viewers can look but not search or import.
+- VERIFIED: migration `027_acq_lead_search_source` applied to prod (`acq_027_lead_search_source`): the `simplybooked` org now has an active `osm` / `osm_overpass` source; new organisations get one from a trigger; anon has no execute on the trigger function. Locally: 11 new checks (db/tests/p8.sql); full suite on the final schema passes (`ACQ_FINAL_SCHEMA_SUITE_OK`).
+- VERIFIED: Lead Finder (n8n/acq_phase2.py) gained multi-word trade aliases (beauty salons, nail salons, tattoo studios, pet groomers, driving schools…); harness check LF13 proves every one of the 18 trades on the screen becomes a real Overpass query (83 harness checks pass).
+- VERIFIED (Playwright, demo + mocked live API): 32 browser checks — payloads, batching, daily-limit message, stale-queue warning, viewer lock, HTML in server text shown as text, no CSP errors, no sideways scroll at 390/768px.
+- NOT LIVE YET: searches stay "Waiting" until the n8n Lead Finder (`n8n/acq/10-ACQ-Lead-Finder.json`) is imported and active; the screen says so when a search has waited over 15 minutes.
