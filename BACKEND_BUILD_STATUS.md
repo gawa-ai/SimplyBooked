@@ -40,7 +40,7 @@ VERIFIED (local): 0 functions in `acq`/`bos` executable by `anon`.
 | Function | Auth | Purpose |
 |---|---|---|
 | `acq-api` | user JWT, validated in code (`auth.getUser`) + origin allow-list + per-user rate limit | The only door the dashboard uses for privileged actions; calls the user RPCs **with the caller's JWT** (never the server key). 34 allow-listed actions. |
-| `acq-track` | public | Open/click tracking + one-click unsubscribe (token only, rate-limited). |
+| `acq-track` | public | Unsubscribe link in every email: GET shows a confirm page (never mutates, safe for mail scanners), POST unsubscribes (RFC 8058 one-click). Token only, identical responses, per-IP rate limit. Opens/clicks/bounces come from the Resend webhook. |
 | `acq-demo` | public | Demo page data (64-hex token), CTA click tracking, slot list and booking (rate-limited per IP and per token). |
 | `resend-webhook` | Svix signature (`RESEND_WEBHOOK_SECRET`) | Delivery events → `record_delivery_event`; replay window + de-dupe. |
 | `_shared/keys.ts` | — | Reads the new `sb_publishable`/`sb_secret` keys (`SUPABASE_PUBLISHABLE_KEYS` / `SUPABASE_SECRET_KEYS`), falls back to legacy `anon`/`service_role` (Supabase retires those at the end of 2026). |
