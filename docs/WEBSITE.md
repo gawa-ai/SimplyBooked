@@ -6,10 +6,18 @@ Static site deployed by Netlify (`netlify.toml` at the repo root, publish folder
 |---|---|
 | `index.html` | Landing page |
 | `login.html` | Sign in: password, emailed sign-in link, and password reset |
-| `app.html` | Dashboard: Today, Pipeline, Approvals, Replies, Meetings, Clients |
-| `app.html?demo=1` | The same dashboard with fictional sample businesses. Nothing is saved or sent. |
+| `app.html` | Dashboard. **Front desk** (Overview, Calendar, Calls and texts) for a business's own bookings; **Growth** (Sales, Pipeline, Approvals, Replies, Meetings, Clients) for the SimplyBooked team |
+| `app.html?demo=1` | Front desk of a fictional barbershop, for showing prospects. Nothing is saved or sent. |
+| `app.html?demo=sales` | Front desk plus the Growth screens, with sample data |
+
+## Who sees what
+- **SimplyBooked team** (a row in `acq.profiles`): Growth screens, plus the Front desk of every client whose booking system is provisioned (pick the business in the sidebar).
+- **A client's owner or staff**: only their own business's Front desk. Give access with
+  `select acq.add_client_user('<client id>', 'owner@theirbusiness.co.uk');` (run as an admin of your organisation, after creating their user under Authentication → Users). Switch it off with `acq.set_client_user_active('<client id>', '<email>', false)`.
+- Front desk data comes from the `acq.portal_*` functions (migration `025_acq_client_portal.sql`). They check access on every call; the booking schema `bos` is never exposed.
 
 ## How the dashboard talks to Supabase
+- **Front desk reads** call `acq.portal_overview / portal_day / portal_upcoming / portal_activity` with the signed-in user's token.
 - **Reads** go to PostgREST views in the `acq` schema (`v_leads`, `v_outreach`, `v_replies`, `v_meetings`, `v_clients`, `dashboard_metrics()`), using the signed-in user's token. Row-level security limits every read to the user's own organisation.
 - **Changes** go to the `acq-api` edge function, which validates input, rate-limits each user, and runs the change with the user's own token, so the database re-checks their role.
 - Only the **publishable** key is in `js/config.js`. Never put a secret key in the website.

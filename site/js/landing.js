@@ -69,3 +69,26 @@ if ('IntersectionObserver' in window) {
 }
 
 reduceMotion.addEventListener?.('change', () => videos.forEach((v) => (reduceMotion.matches ? pause(v) : null)));
+
+// "Watch the film": plays the brand film in a dialog, with controls; stops when closed.
+const filmDialog = document.querySelector('.js-film-dialog');
+const filmVideo = filmDialog?.querySelector('video');
+document.querySelector('.js-film')?.addEventListener('click', () => {
+  if (!filmDialog) return;
+  filmDialog.showModal();
+  filmDialog.querySelector('.js-film-close')?.focus();
+  const p = filmVideo?.play();
+  if (p && typeof p.catch === 'function') p.catch(() => {});
+});
+filmDialog?.querySelector('.js-film-close')?.addEventListener('click', () => filmDialog.close());
+filmDialog?.addEventListener('click', (e) => { if (e.target === filmDialog) filmDialog.close(); });
+filmDialog?.addEventListener('close', () => { filmVideo?.pause(); });
+
+// The reel moves on its own, so it can be paused (WCAG 2.2.2).
+const reel = document.querySelector('.reel');
+const reelToggle = document.querySelector('.js-reel-toggle');
+reelToggle?.addEventListener('click', () => {
+  const paused = reel.classList.toggle('is-paused');
+  reelToggle.setAttribute('aria-pressed', String(paused));
+  reelToggle.textContent = paused ? 'Play the reel' : 'Pause the reel';
+});

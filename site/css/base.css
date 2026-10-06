@@ -13,6 +13,23 @@
   --blue: #005efc;         /* "Booked" blue */
   --blue-press: #004ccf;
   --blue-wash: #e8f0ff;
+  /* the band behind the landing reel: a muted harbour blue between the logo navy and the films' daylight */
+  --harbour: #2b4a6f;
+  --harbour-deep: #223d5e;
+  /* categorical set (validated for colour-blind separation): blue, teal, brass, violet — channels and staff */
+  --c1: #005efc;
+  --c2: #12957a;
+  --c3: #b07a12;
+  --c4: #7a5cc2;
+  --c1-wash: #e8f0ff;
+  --c2-wash: #e2f4ef;
+  --c3-wash: #f8efdc;
+  --c4-wash: #efeaf9;
+  /* the same hues deepened for white text on the KPI cards */
+  --k-navy: #011d3f;
+  --k-blue: #0050d8;
+  --k-teal: #0d6b58;
+  --k-brass: #87590b;
   /* surfaces — the limestone counter from the brand films, used sparingly */
   --paper: #ffffff;
   --stone: #f2efe9;

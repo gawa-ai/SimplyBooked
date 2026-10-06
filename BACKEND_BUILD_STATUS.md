@@ -124,3 +124,8 @@ Live acceptance (do in this order, `outreach_enabled = false` until step 4):
 - Production is Postgres 17; local tests ran on Postgres 16. The applied `bos` schema fingerprints match exactly — **VERIFIED** for 001; ACQ to be fingerprinted after 021–024.
 - Reply matching by email `Message-ID` is best effort (some clients drop `In-Reply-To`); unmatched replies land in a triage list.
 - Homepage fetching for qualification has a residual DNS-rebinding SSRF risk (hostname checks only); keep n8n egress restricted.
+
+## 2026-10-06 — Client portal (Front desk)
+- VERIFIED: migration 025_acq_client_portal applied to prod (acq_025_client_portal); 40 new checks pass locally (db/tests/p6.sql) on top of the 480 existing ones; anon has no execute on any acq function; client_users has RLS.
+- Found and fixed during testing: a NULL comparison in the access check would have let a signed-in client user through. Covered by test 605.
+- NOT TESTED LIVE: portal RPCs against real bookings (prod has no bos data yet).

@@ -28,85 +28,144 @@
       </a>
       <nav class="site-nav" aria-label="Main">
         <a href="#how">How it works</a>
-        <a href="#who">Who it's for</a>
+        <a href="#who">A day with Sophie</a>
         <a href="#questions">Questions</a>
       </nav>
       <div class="site-head-actions">
         <a class="text-link" href="/login.html">Sign in</a>
-        <a class="btn btn-dark btn-sm" href="/app.html?demo=1">See the dashboard</a>
+        <a class="btn btn-dark btn-sm" href="/app.html?demo=1">See it in action</a>
       </div>
     </div>
   </header>
 
   <main id="main">
-    <!-- Hero: the phone stays still while the business around it changes -->
+    <!-- Hero: real appointments, booked while the owner was busy -->
     <section class="hero" aria-labelledby="hero-title">
-      <div class="wrap hero-grid">
-        <div class="hero-copy">
-          <h1 id="hero-title">The receptionist who never misses a call.</h1>
-          <p class="hero-lede">SimplyBooked answers your phone, books appointments straight into your calendar and texts every customer their confirmation — while you look after the one in front of you.</p>
-          <div class="hero-actions">
-            <a class="btn btn-primary btn-lg" href="/app.html?demo=1">See the dashboard</a>
-            <a class="btn btn-ghost btn-lg" href="#how">How it works</a>
-            <a class="btn btn-ghost btn-lg js-contact" href="#" hidden>Book a call</a>
-          </div>
-          <p class="hero-note">For barbers, salons, clinics, garages and every business that runs on appointments.</p>
+      <div class="wrap hero-copy">
+        <h1 id="hero-title">The receptionist who never misses a call.</h1>
+        <p class="hero-lede">SimplyBooked answers your phone, books appointments into your calendar and texts every customer their confirmation, so you can stay with the one in front of you.</p>
+        <div class="hero-actions">
+          <a class="btn btn-on-dark btn-lg" href="/app.html?demo=1">See it in action</a>
+          <a class="btn btn-outline-light btn-lg js-contact" href="#" hidden>Book a call</a>
         </div>
+        <p class="hero-note">A live demo with a sample barbershop. No sign-up needed.</p>
+      </div>
 
-        <figure class="hero-stage">
-          <div class="stage-frame">
-            <video class="stage-video js-video" autoplay muted loop playsinline preload="auto"
-                   poster="/.netlify/images?url=/media/hero-poster.png&amp;w=1400&amp;fm=webp&amp;q=80"
-                   aria-label="A phone showing the SimplyBooked dashboard while a barbershop, a salon, a clinic, a garage and a bakery change around it">
-              <source src="/media/hero.mp4" type="video/mp4">
-            </video>
-          </div>
-          <div class="sms" role="img" aria-label="Example confirmation text: Hi Emma, your haircut at Leo's is booked for Thu 9 Oct at 2:30pm. Ref K7Q2MP. Reply C to confirm.">
-            <div class="sms-head">
-              <img src="/assets/mark.png" alt="" width="18" height="25">
-              <span>Leo's Barbers</span>
-              <span class="sms-time">now</span>
-            </div>
-            <p>Hi Emma, your haircut at Leo's is booked for Thu 9 Oct at 2:30pm. Ref K7Q2MP. Reply C to confirm.</p>
-          </div>
-          <figcaption class="sr-only">SimplyBooked works the same way for every kind of appointment business.</figcaption>
-        </figure>
+      <div class="reel" aria-label="Appointments booked by SimplyBooked for barbers, salons, dental clinics, garages, opticians and bakeries">
+        <div class="reel-track">
+          <ul class="reel-set" role="list">
+            <li class="reel-card">
+              <video class="js-video js-lazy" muted loop playsinline preload="none" data-src="/media/barber.mp4" aria-hidden="true"></video>
+              <span class="reel-time"><span class="reel-dot" aria-hidden="true"></span>9:30am</span>
+              <span class="reel-service">Skin fade</span>
+              <span class="reel-note">Booked by phone at 11:42pm</span>
+            </li>
+            <li class="reel-card">
+              <video class="js-video js-lazy" muted loop playsinline preload="none" data-src="/media/salon.mp4" aria-hidden="true"></video>
+              <span class="reel-time"><span class="reel-dot" aria-hidden="true"></span>11:00am</span>
+              <span class="reel-service">Balayage</span>
+              <span class="reel-note">Booked on the website at 6:15am</span>
+            </li>
+            <li class="reel-card">
+              <video class="js-video js-lazy" muted loop playsinline preload="none" data-src="/media/dental.mp4" aria-hidden="true"></video>
+              <span class="reel-time"><span class="reel-dot" aria-hidden="true"></span>2:15pm</span>
+              <span class="reel-service">Check-up</span>
+              <span class="reel-note">Moved by text, no call needed</span>
+            </li>
+            <li class="reel-card">
+              <video class="js-video js-lazy" muted loop playsinline preload="none" data-src="/media/garage.mp4" aria-hidden="true"></video>
+              <span class="reel-time"><span class="reel-dot" aria-hidden="true"></span>8:00am</span>
+              <span class="reel-service">MOT</span>
+              <span class="reel-note">Booked by phone on a Sunday</span>
+            </li>
+            <li class="reel-card">
+              <video class="js-video js-lazy" muted loop playsinline preload="none" data-src="/media/optician.mp4" aria-hidden="true"></video>
+              <span class="reel-time"><span class="reel-dot" aria-hidden="true"></span>3:40pm</span>
+              <span class="reel-service">Eye test</span>
+              <span class="reel-note">Booked while you were with a customer</span>
+            </li>
+            <li class="reel-card">
+              <video class="js-video js-lazy" muted loop playsinline preload="none" data-src="/media/bakery.mp4" aria-hidden="true"></video>
+              <span class="reel-time"><span class="reel-dot" aria-hidden="true"></span>10:00am</span>
+              <span class="reel-service">Cake collection</span>
+              <span class="reel-note">Confirmed by text</span>
+            </li>
+          </ul>
+          <ul class="reel-set" role="list" aria-hidden="true" inert>
+            <li class="reel-card">
+              <video class="js-video js-lazy" muted loop playsinline preload="none" data-src="/media/barber.mp4" aria-hidden="true"></video>
+              <span class="reel-time"><span class="reel-dot" aria-hidden="true"></span>9:30am</span>
+              <span class="reel-service">Skin fade</span>
+              <span class="reel-note">Booked by phone at 11:42pm</span>
+            </li>
+            <li class="reel-card">
+              <video class="js-video js-lazy" muted loop playsinline preload="none" data-src="/media/salon.mp4" aria-hidden="true"></video>
+              <span class="reel-time"><span class="reel-dot" aria-hidden="true"></span>11:00am</span>
+              <span class="reel-service">Balayage</span>
+              <span class="reel-note">Booked on the website at 6:15am</span>
+            </li>
+            <li class="reel-card">
+              <video class="js-video js-lazy" muted loop playsinline preload="none" data-src="/media/dental.mp4" aria-hidden="true"></video>
+              <span class="reel-time"><span class="reel-dot" aria-hidden="true"></span>2:15pm</span>
+              <span class="reel-service">Check-up</span>
+              <span class="reel-note">Moved by text, no call needed</span>
+            </li>
+            <li class="reel-card">
+              <video class="js-video js-lazy" muted loop playsinline preload="none" data-src="/media/garage.mp4" aria-hidden="true"></video>
+              <span class="reel-time"><span class="reel-dot" aria-hidden="true"></span>8:00am</span>
+              <span class="reel-service">MOT</span>
+              <span class="reel-note">Booked by phone on a Sunday</span>
+            </li>
+            <li class="reel-card">
+              <video class="js-video js-lazy" muted loop playsinline preload="none" data-src="/media/optician.mp4" aria-hidden="true"></video>
+              <span class="reel-time"><span class="reel-dot" aria-hidden="true"></span>3:40pm</span>
+              <span class="reel-service">Eye test</span>
+              <span class="reel-note">Booked while you were with a customer</span>
+            </li>
+            <li class="reel-card">
+              <video class="js-video js-lazy" muted loop playsinline preload="none" data-src="/media/bakery.mp4" aria-hidden="true"></video>
+              <span class="reel-time"><span class="reel-dot" aria-hidden="true"></span>10:00am</span>
+              <span class="reel-service">Cake collection</span>
+              <span class="reel-note">Confirmed by text</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <div class="wrap hero-foot">
+        <button class="film-btn js-film" type="button">
+          <span class="film-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="12" height="12"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></svg></span>
+          Watch the film
+        </button>
+        <button class="reel-toggle js-reel-toggle" type="button" aria-pressed="false">Pause the reel</button>
       </div>
     </section>
 
-    <!-- Who it's for -->
-    <section class="who" id="who" aria-labelledby="who-title">
-      <div class="wrap">
-        <div class="section-head">
-          <h2 id="who-title">Busy with a customer? That's exactly when the phone rings.</h2>
-          <p>Every missed call is a booking that goes to someone else. SimplyBooked picks up, in your business's name, so you never have to choose between the person in your chair and the one on the line.</p>
+    <dialog class="film js-film-dialog" aria-label="SimplyBooked film">
+      <button class="film-close js-film-close" type="button" aria-label="Close the film">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+      <video class="film-video" controls playsinline preload="none" poster="/.netlify/images?url=/media/hero-poster.png&amp;w=1600&amp;fm=webp&amp;q=80">
+        <source src="/media/hero.mp4" type="video/mp4">
+      </video>
+    </dialog>
+
+    <!-- A day at the front desk: a real sequence, so it carries times -->
+    <section class="day" id="who" aria-labelledby="day-title">
+      <div class="wrap day-grid">
+        <div class="day-copy">
+          <h2 id="day-title">Busy with a customer? That's exactly when the phone rings.</h2>
+          <p>Every missed call is a booking that goes to someone else. Here's how a typical day looks for a busy salon.</p>
+          <ol class="timeline">
+            <li><time>7:58am</time><div><b>New booking by phone</b><span>Cut and colour on Thursday at 9am, before the salon opened</span></div></li>
+            <li><time>11:42am</time><div><b>Moved by text</b><span>"Can I come Friday instead?" Moved, with a fresh confirmation</span></div></li>
+            <li><time>1:15pm</time><div><b>Question answered</b><span>"Do I need a patch test?" Answered from your own notes</span></div></li>
+            <li><time>6:40pm</time><div><b>Reminders sent</b><span>Fourteen clients reminded about tomorrow's appointments</span></div></li>
+            <li><time>11:03pm</time><div><b>Booked after hours</b><span>Balayage on Saturday at 10am, while the salon was closed</span></div></li>
+          </ol>
         </div>
-        <ul class="trades" role="list">
-          <li class="trade">
-            <div class="trade-media"><video class="js-video js-lazy" muted loop playsinline preload="none" data-src="/media/barber.mp4" aria-hidden="true"></video></div>
-            <h3>Barbers</h3><p>Mid-fade when the phone rings.</p>
-          </li>
-          <li class="trade">
-            <div class="trade-media"><video class="js-video js-lazy" muted loop playsinline preload="none" data-src="/media/salon.mp4" aria-hidden="true"></video></div>
-            <h3>Hair and beauty</h3><p>Colour on, hands full.</p>
-          </li>
-          <li class="trade">
-            <div class="trade-media"><video class="js-video js-lazy" muted loop playsinline preload="none" data-src="/media/dental.mp4" aria-hidden="true"></video></div>
-            <h3>Dental and clinics</h3><p>Chairside all morning, front desk empty.</p>
-          </li>
-          <li class="trade">
-            <div class="trade-media"><video class="js-video js-lazy" muted loop playsinline preload="none" data-src="/media/garage.mp4" aria-hidden="true"></video></div>
-            <h3>Garages</h3><p>Under the bonnet, can't pick up.</p>
-          </li>
-          <li class="trade">
-            <div class="trade-media"><video class="js-video js-lazy" muted loop playsinline preload="none" data-src="/media/optician.mp4" aria-hidden="true"></video></div>
-            <h3>Opticians</h3><p>Mid-fitting with a customer.</p>
-          </li>
-          <li class="trade">
-            <div class="trade-media"><video class="js-video js-lazy" muted loop playsinline preload="none" data-src="/media/bakery.mp4" aria-hidden="true"></video></div>
-            <h3>Bakers and makers</h3><p>Hands in the dough, orders still coming.</p>
-          </li>
-        </ul>
+        <figure class="day-media">
+          <img src="/.netlify/images?url=/media/salon-phone.png&amp;w=1200&amp;fm=webp&amp;q=80" alt="A phone showing the SimplyBooked dashboard on the counter of a hair studio" width="1200" height="900" loading="lazy">
+        </figure>
       </div>
     </section>
 
@@ -140,6 +199,14 @@
                    poster="/.netlify/images?url=/media/dental-phone.png&amp;w=1200&amp;fm=webp&amp;q=80"
                    aria-label="A SimplyBooked booking confirmation on a phone"></video>
           </div>
+          <div class="sms" role="img" aria-label="Example confirmation text">
+            <div class="sms-head">
+              <img src="/assets/mark.png" alt="" width="18" height="25">
+              <span>Leo's Barbers</span>
+              <span class="sms-time">now</span>
+            </div>
+            <p>Hi Emma, your haircut at Leo's is booked for Thu 9 Oct at 2:30pm. Ref K7Q2MP. Reply C to confirm.</p>
+          </div>
         </figure>
       </div>
     </section>
@@ -155,7 +222,7 @@
           </div>
         </div>
         <a class="product-shot" href="/app.html?demo=1" aria-label="Open the live dashboard demo">
-          <img src="/assets/dashboard.png" alt="The SimplyBooked dashboard showing today's work, bookings and pipeline" width="2400" height="1500" loading="lazy">
+          <img src="/assets/dashboard.png" alt="The SimplyBooked dashboard for a barbershop: bookings, takings, calls answered, upcoming appointments and today's diary" width="2880" height="1800" loading="lazy">
         </a>
       </div>
     </section>
@@ -211,7 +278,7 @@
           <h2 id="close-title">Let the phone ring. It's handled.</h2>
           <p>See exactly what your customers and your team would see — bookings, messages and all.</p>
           <div class="hero-actions">
-            <a class="btn btn-on-dark btn-lg" href="/app.html?demo=1">See the dashboard</a>
+            <a class="btn btn-on-dark btn-lg" href="/app.html?demo=1">See it in action</a>
             <a class="btn btn-outline-light btn-lg js-contact" href="#" hidden>Book a call</a>
           </div>
         </div>

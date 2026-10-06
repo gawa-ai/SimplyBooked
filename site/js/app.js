@@ -1,10 +1,16 @@
-// SimplyBooked dashboard. Live mode reads the signed-in organisation's data; ?demo=1 renders the same screens
-// with fictional sample data and never contacts the server.
+// SimplyBooked dashboard.
+//   Front desk: a business's own diary, bookings, calls and revenue (acq.portal_* functions over the booking engine).
+//   Growth: the SimplyBooked team's lead pipeline, approvals and clients.
+// Live mode shows what the signed-in person is allowed to see. ?demo=1 shows the Front desk of a fictional barbershop,
+// ?demo=sales adds the Growth screens; demo mode never contacts the server.
 import { getSession, signOut } from './auth.js';
 import * as api from './api.js';
 import * as demo from './demo-data.js';
+import * as desk from './demo-frontdesk.js';
 
-const DEMO = new URLSearchParams(location.search).has('demo');
+const PARAMS = new URLSearchParams(location.search);
+const DEMO = PARAMS.has('demo');
+const DEMO_SALES = DEMO && PARAMS.get('demo') === 'sales';
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -45,7 +51,8 @@ function safeUrl(u) {
   } catch { return null; }
 }
 
-let TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/London';
+const BROWSER_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/London';
+let TZ = BROWSER_TZ;
 const fmt = (opts) => new Intl.DateTimeFormat('en-GB', { timeZone: TZ, ...opts });
 const time = (iso) => fmt({ hour: 'numeric', minute: '2-digit', hour12: true }).format(new Date(iso)).replace(' ', '').toLowerCase();
 const dayKey = (d) => fmt({ year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
@@ -132,6 +139,12 @@ const live = {
   meetings: () => api.select('v_meetings', `select=*&starts_at=gte.${encodeURIComponent(new Date(Date.now() - 14 * 864e5).toISOString())}&status=in.(scheduled,completed,no_show)&order=starts_at.asc&limit=200`),
   clients: () => api.select('v_clients', 'select=*&order=won_at.desc.nullslast&limit=200'),
   act: (name, params) => api.action(name, params),
+  // Front desk
+  portalClients: async () => (await api.rpc('portal_clients'))?.clients || [],
+  overview: (client, days) => api.rpc('portal_overview', { p_client: client, p_days: days }),
+  day: (client, date) => api.rpc('portal_day', { p_client: client, p_date: date || null }),
+  upcoming: (client, from, days) => api.rpc('portal_upcoming', { p_client: client, p_from: from || null, p_days: days }),
+  activity: (client) => api.rpc('portal_activity', { p_client: client, p_limit: 40 }),
 };
 
 const demoStore = { leads: clone(demo.leads), outreach: clone(demo.outreach), replies: clone(demo.replies), meetings: clone(demo.meetings), clients: clone(demo.clients) };
@@ -164,20 +177,30 @@ const sample = {
     if (name === 'set_meeting_outcome') { const m = demoStore.meetings.find((x) => x.id === p.meeting_id); if (m) m.status = p.status; }
     return { ok: true, demo: true };
   },
+  // Front desk
+  portalClients: async () => [clone(desk.client)],
+  overview: (_c, days) => desk.overview(days),
+  day: (_c, date) => desk.day(date),
+  upcoming: (_c, from, days) => desk.upcoming(from, days),
+  activity: () => desk.activity(),
 };
 
 const src = DEMO ? sample : live;
-const state = { profile: null, org: null, metrics: null, days: 90, leadFilter: '' };
+const state = { profile: null, org: null, metrics: null, days: 90, leadFilter: '',
+  canGrowth: false, canDesk: false, clients: [], client: null, deskDays: 30, calDate: null, railDay: null };
 
 /* ------------------------------------------------------------------ chrome */
 
 const VIEWS = {
-  today: { title: 'Today', sub: () => (state.org?.name ? `${state.org.name} at a glance` : 'Your business at a glance'), render: renderToday },
-  pipeline: { title: 'Pipeline', sub: () => 'Every business you\'re talking to, by stage', render: renderPipeline },
-  approvals: { title: 'Approvals', sub: () => 'Nothing is sent until you approve it', render: renderApprovals },
-  replies: { title: 'Replies', sub: () => 'Answers from businesses you\'ve contacted', render: renderReplies },
-  meetings: { title: 'Meetings', sub: () => 'Calls and demos, past fortnight and ahead', render: renderMeetings },
-  clients: { title: 'Clients', sub: () => 'Onboarding progress and monthly revenue', render: renderClients },
+  overview: { group: 'desk', title: 'Overview', sub: () => state.client?.business_name || '', render: renderOverview },
+  calendar: { group: 'desk', title: 'Calendar', sub: () => state.client?.business_name || '', render: renderCalendar },
+  activity: { group: 'desk', title: 'Calls and texts', sub: () => `What ${state.receptionist || 'your receptionist'} handled for ${state.client?.business_name || 'you'}`, render: renderActivity },
+  sales: { group: 'growth', title: 'Sales', sub: () => (state.org?.name ? `${state.org.name} at a glance` : 'Your pipeline at a glance'), render: renderToday },
+  pipeline: { group: 'growth', title: 'Pipeline', sub: () => 'Every business you\'re talking to, by stage', render: renderPipeline },
+  approvals: { group: 'growth', title: 'Approvals', sub: () => 'Nothing is sent until you approve it', render: renderApprovals },
+  replies: { group: 'growth', title: 'Replies', sub: () => 'Answers from businesses you\'ve contacted', render: renderReplies },
+  meetings: { group: 'growth', title: 'Meetings', sub: () => 'Calls and demos, past fortnight and ahead', render: renderMeetings },
+  clients: { group: 'growth', title: 'Clients', sub: () => 'Onboarding progress and monthly revenue', render: renderClients },
 };
 
 const view = $('#view');
@@ -207,10 +230,15 @@ function empty(title, body, action) {
 }
 
 let renderSeq = 0;
+const allowed = (key) => VIEWS[key] && (VIEWS[key].group === 'desk' ? state.canDesk : state.canGrowth);
+const homeView = () => (state.canGrowth && !DEMO ? 'sales' : 'overview');
 async function route() {
-  const name = (location.hash.replace('#', '') || 'today');
-  const v = VIEWS[name] || VIEWS.today;
-  const key = VIEWS[name] ? name : 'today';
+  const name = location.hash.replace('#', '');
+  const key = allowed(name) ? name : homeView();
+  if (name !== key) history.replaceState(null, '', `${location.pathname}${location.search}#${key}`);
+  const v = VIEWS[key];
+  // Front desk speaks the business's time; Growth speaks the organisation's
+  TZ = v.group === 'desk' ? (state.clientTz || 'Europe/London') : (state.orgTz || BROWSER_TZ);
   for (const a of document.querySelectorAll('.side-nav a')) {
     if (a.dataset.view === key) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   }
@@ -693,6 +721,428 @@ async function renderClients(current) {
   view.replaceChildren(h('div', { class: 'panel' }, h('div', { class: 'panel-body table-wrap' }, table)));
 }
 
+/* ================================================================== Front desk */
+
+const STAFF_TONES = ['t1', 't2', 't3', 't4'];
+const toneOf = (i) => (i >= 0 && i < 4 ? STAFF_TONES[i] : 't0'); // a fifth person onwards shares a neutral tone (never a made-up hue)
+const CHANNEL_SAID = { phone: 'Booked by phone', web: 'Booked on the website', text: 'Booked by text', team: 'Added by the team' };
+const SERIES = [['phone', 'Phone'], ['web', 'Website'], ['text', 'Text'], ['team', 'Team']];
+const BOOKING_STATUS = { booked: ['Booked', 'pill-blue'], confirmed: ['Confirmed', 'pill-mint'], completed: ['Completed', ''], no_show: ['No-show', 'pill-amber'] };
+
+const ICON = {
+  calendar: 'M5 6.5h14a1 1 0 0 1 1 1V19a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7.5a1 1 0 0 1 1-1zM4 10.5h16M8.5 4v4M15.5 4v4',
+  spark: 'M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1-5.1-1.9 5.1-1.9zM18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z',
+  pound: 'M16.5 7.2C16 5.6 14.6 4.5 12.7 4.5 10.4 4.5 9 6.1 9 8.4c0 2.6 1.3 4.4 1.3 6.6 0 1.9-1 3.1-2.8 4.5h10M7 12.2h7',
+  phone: 'M6.6 4.5h2.6l1.4 3.6-1.8 1.2a9.5 9.5 0 0 0 5.9 5.9l1.2-1.8 3.6 1.4v2.6a1.5 1.5 0 0 1-1.6 1.5C10.6 18.4 5.6 13.4 5.1 6.1a1.5 1.5 0 0 1 1.5-1.6z',
+  web: 'M12 20.5a8.5 8.5 0 1 0 0-17 8.5 8.5 0 0 0 0 17zM3.5 12h17M12 3.5c2.3 2.4 3.4 5.2 3.4 8.5s-1.1 6.1-3.4 8.5c-2.3-2.4-3.4-5.2-3.4-8.5s1.1-6.1 3.4-8.5z',
+  left: 'M14.5 6l-6 6 6 6', right: 'M9.5 6l6 6-6 6',
+};
+
+/* ---------- dates in the business's own time zone ---------- */
+function tzParts(d) {
+  return Object.fromEntries(fmt({ year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+    .formatToParts(d).filter((x) => x.type !== 'literal').map((x) => [x.type, x.value]));
+}
+const isoDay = (d = new Date()) => { const p = tzParts(d); return `${p.year}-${p.month}-${p.day}`; };
+const minuteOfDay = (iso) => { const p = tzParts(new Date(iso)); return Number(p.hour) * 60 + Number(p.minute); };
+const shiftDay = (ds, n) => { const [y, m, d] = ds.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10); };
+const plainDate = (ds, opts) => new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', ...opts }).format(new Date(`${ds}T12:00:00Z`));
+const hhmm = (min) => { const h24 = Math.floor(min / 60), m = min % 60; const h12 = ((h24 + 11) % 12) + 1; return `${h12}${m ? `:${String(m).padStart(2, '0')}` : ''}${h24 < 12 ? 'am' : 'pm'}`; };
+const initials = (label) => { const w = String(label || '').replace(/[^A-Za-z\s.]/g, '').trim().split(/\s+/).filter(Boolean); return w.length ? (w[0][0] + (w[1]?.[0] || '')).toUpperCase() : '•'; };
+
+function delta(cur, prev) {
+  const c = Number(cur) || 0, p = Number(prev) || 0;
+  if (!p) return null;
+  const pct = Math.round(((c - p) / p) * 100);
+  return `${pct > 0 ? '+' : pct < 0 ? '−' : ''}${Math.abs(pct)}%`;
+}
+
+function kcard(tone, icon, label, value, change, period) {
+  return h('div', { class: `kcard ${tone}` },
+    h('div', { class: 'k-top' }, h('span', { class: 'k-icon', 'aria-hidden': 'true' }, svg(icon, 20)),
+      change ? h('span', { class: 'k-delta', title: `Compared with the previous ${period}`, text: change }) : null),
+    h('div', { class: 'k-value num', text: value }),
+    h('div', { class: 'k-label', text: label }),
+    change ? h('span', { class: 'sr-only', text: `, ${change} on the previous ${period}` }) : null);
+}
+
+/* ---------- the diary: one column per member of staff ---------- */
+function renderDiary(day, { compact = false } = {}) {
+  if (day.closed && !day.bookings.length) return h('p', { class: 'sched-closed', text: `Closed on ${plainDate(day.date, { weekday: 'long' })}s.` });
+  // bookings whose member of staff isn't in the list still get a column
+  const known = new Set(day.staff.map((x) => x.id));
+  const d = { ...day, staff: [...day.staff] };
+  if (day.bookings.some((b) => !known.has(b.staff_id))) {
+    d.staff.push({ id: '__unassigned', name: 'Unassigned', kind: 'staff' });
+    d.bookings = day.bookings.map((b) => (known.has(b.staff_id) ? b : { ...b, staff_id: '__unassigned' }));
+  }
+  if (!d.staff.length) return h('p', { class: 'sched-closed', text: 'No staff have been set up for this business yet.' });
+  const toM = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
+  // the visible hours stretch to fit any booking outside the usual opening times
+  const firstB = d.bookings.length ? Math.min(...d.bookings.map((b) => minuteOfDay(b.starts_at))) : Infinity;
+  const lastB = d.bookings.length ? Math.max(...d.bookings.map((b) => Math.max(minuteOfDay(b.ends_at), minuteOfDay(b.starts_at) + 10))) : -Infinity;
+  const open = Math.floor(Math.min(toM(d.opens), firstB) / 60) * 60;
+  const close = Math.min(24 * 60, Math.ceil(Math.max(toM(d.closes), lastB) / 60) * 60);
+  const HOUR = compact ? 62 : 88;
+  const height = ((close - open) / 60) * HOUR;
+  const staffIndex = new Map(d.staff.map((s, i) => [s.id, i]));
+  const grid = h('div', { class: 'sched', role: 'group', 'aria-label': `Diary for ${plainDate(d.date, { weekday: 'long', day: 'numeric', month: 'long' })}` });
+  grid.style.setProperty('--cols', String(Math.max(1, d.staff.length)));
+  grid.style.setProperty('--hour', `${HOUR}px`);
+  grid.style.setProperty('--h', `${height}px`);
+
+  grid.append(h('div', { class: 'sched-corner', 'aria-hidden': 'true' }));
+  d.staff.forEach((s, i) => {
+    const n = d.bookings.filter((b) => b.staff_id === s.id).length;
+    grid.append(h('div', { class: 'sched-staff' }, h('i', { class: `dot ${toneOf(s.id === '__unassigned' ? -1 : i)}`, 'aria-hidden': 'true' }), s.name, h('span', { text: `${n}` })));
+  });
+
+  const times = h('div', { class: 'sched-times', 'aria-hidden': 'true' });
+  for (let m = open; m <= close; m += 60) {
+    const t = h('span', { text: hhmm(m) });
+    t.style.top = `${((m - open) / 60) * HOUR}px`;
+    if (m === open) t.style.transform = 'translateY(2px)';
+    if (m === close) t.style.transform = 'translateY(-100%)';
+    times.append(t);
+  }
+  grid.append(times);
+
+  d.staff.forEach((s) => {
+    const col = h('div', { class: 'sched-col' });
+    for (const b of d.bookings.filter((x) => x.staff_id === s.id)) {
+      const a = Math.max(open, minuteOfDay(b.starts_at));
+      // a booking running past midnight ends at the bottom of the day
+      const endM = isoDay(new Date(b.ends_at)) === d.date ? minuteOfDay(b.ends_at) : close;
+      const z = Math.min(close, Math.max(a + 10, endM));
+      const tall = ((z - a) / 60) * HOUR;
+      const blk = h('button', { type: 'button',
+        class: `blk ${toneOf(s.id === '__unassigned' ? -1 : staffIndex.get(s.id))}${b.status === 'completed' ? ' is-done' : ''}${b.status === 'no_show' ? ' is-noshow' : ''}`,
+        'aria-label': `${time(b.starts_at)} to ${time(b.ends_at)}, ${b.service} for ${b.customer} with ${s.name}${b.status === 'no_show' ? ', no-show' : ''}`,
+        onClick: () => openBooking(b, s.name) },
+        h('b', { text: b.service }),
+        tall >= 44 ? h('span', { text: b.customer }) : null,
+        tall >= 59 ? h('small', { text: `${time(b.starts_at)} – ${time(b.ends_at)}` }) : null);
+      blk.style.top = `${((a - open) / 60) * HOUR + 2}px`;
+      blk.style.height = `${Math.max(18, tall - 4)}px`;
+      if (tall < 44) { blk.style.paddingBlock = '2px'; blk.style.alignContent = 'center'; }
+      col.append(blk);
+    }
+    grid.append(col);
+  });
+
+  const wrap = h('div', { class: `sched-wrap${compact ? ' is-compact' : ''}` }, grid);
+  if (d.date === isoDay()) {
+    const nowMin = minuteOfDay(new Date().toISOString());
+    if (nowMin > open && nowMin < close) {
+      const line = h('div', { class: 'now-line', 'aria-hidden': 'true' });
+      line.style.top = `${46 + ((nowMin - open) / 60) * HOUR}px`;
+      grid.style.position = 'relative';
+      grid.append(line);
+      // start the compact diary near "now"
+      if (compact) requestAnimationFrame(() => { wrap.scrollTop = Math.max(0, ((nowMin - open) / 60) * HOUR - 120); });
+    }
+  }
+  return wrap;
+}
+
+function openBooking(b, staffName) {
+  const close = h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Close', onClick: () => drawer.close() }, svg(ICON_CLOSE));
+  const [label, tone] = BOOKING_STATUS[b.status] || [titleCase(b.status), ''];
+  const fact = (k, v) => (v ? [h('dt', { text: k }), h('dd', { text: v })] : null);
+  drawer.replaceChildren(h('div', { class: 'drawer-inner' },
+    h('header', { class: 'drawer-head' },
+      h('div', {}, h('h2', { id: 'drawer-title', text: b.service }), h('p', { text: `${plainDate(isoDay(new Date(b.starts_at)), { weekday: 'long', day: 'numeric', month: 'long' })}, ${time(b.starts_at)} – ${time(b.ends_at)}` })),
+      close),
+    h('div', { class: 'drawer-body' },
+      h('div', { class: 'moves' }, h('span', { class: `pill ${tone}`, text: label })),
+      h('dl', { class: 'facts' },
+        fact('Customer', b.customer), fact('With', staffName || b.staff), fact('How it was booked', CHANNEL_SAID[b.channel] || ''),
+        fact('Price', b.price ? money(b.price) : null), fact('Booking reference', b.ref)))));
+  drawer.showModal();
+  close.focus();
+}
+
+/* ---------- charts ---------- */
+const SVGNS = 'http://www.w3.org/2000/svg';
+function s(tag, attrs = {}, text) {
+  const el = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs)) if (v !== null && v !== undefined) el.setAttribute(k, String(v));
+  if (text !== undefined) el.textContent = text;
+  return el;
+}
+/** Three to five evenly spaced gridlines with round values (whole numbers for counts), topping out just above the data. */
+function niceScale(v, whole = true) {
+  const raw = Math.max(v, whole ? 4 : 1) / 4;
+  const e = 10 ** Math.floor(Math.log10(raw));
+  let step = [1, 2, 2.5, 5, 10].map((f) => f * e).find((x) => x >= raw) || 10 * e;
+  if (whole) step = Math.max(1, Math.ceil(step));
+  return { step, max: Math.max(step, Math.ceil(v / step) * step) };
+}
+let chartSeq = 0;
+
+// Monotone cubic path (no overshoot below zero or above the peak).
+function monotonePath(pts) {
+  if (pts.length < 2) return pts.length ? `M${pts[0][0]},${pts[0][1]}` : '';
+  const n = pts.length, dx = [], dy = [], m = [], t = [];
+  for (let i = 0; i < n - 1; i++) { dx[i] = pts[i + 1][0] - pts[i][0]; dy[i] = pts[i + 1][1] - pts[i][1]; m[i] = dy[i] / dx[i]; }
+  t[0] = m[0]; t[n - 1] = m[n - 2];
+  for (let i = 1; i < n - 1; i++) t[i] = m[i - 1] * m[i] <= 0 ? 0 : (3 * (dx[i - 1] + dx[i])) / ((2 * dx[i] + dx[i - 1]) / m[i - 1] + (dx[i] + 2 * dx[i - 1]) / m[i]);
+  let d = `M${pts[0][0]},${pts[0][1]}`;
+  for (let i = 0; i < n - 1; i++) {
+    const h3 = dx[i] / 3;
+    d += ` C${pts[i][0] + h3},${pts[i][1] + h3 * t[i]} ${pts[i + 1][0] - h3},${pts[i + 1][1] - h3 * t[i + 1]} ${pts[i + 1][0]},${pts[i + 1][1]}`;
+  }
+  return d;
+}
+
+function srTable(caption, head, rows) {
+  return h('div', { class: 'sr-only' }, h('table', {}, h('caption', { text: caption }),
+    h('thead', {}, h('tr', {}, head.map((x) => h('th', { scope: 'col', text: x })))),
+    h('tbody', {}, rows.map((r) => h('tr', {}, r.map((x) => h('td', { text: x })))))));
+}
+
+/** Bookings per day: one series, a crosshair tooltip, the busiest day labelled. */
+function bookingsChart(daily, W = 640) {
+  if (!daily.length) return h('p', { class: 'muted', text: 'No bookings in this period yet.' });
+  const H = 230, L = 34, R = 12, T = 30, B = 28;
+  const vals = daily.map((d) => Number(d.bookings) || 0);
+  const { step: yStep, max } = niceScale(Math.max(...vals, 1), true);
+  const x = (i) => L + (daily.length === 1 ? (W - L - R) / 2 : (i * (W - L - R)) / (daily.length - 1));
+  const y = (v) => T + (1 - v / max) * (H - T - B);
+  const id = `g${++chartSeq}`;
+  const root = s('svg', { viewBox: `0 0 ${W} ${H}`, class: 'chart-svg', role: 'img', 'aria-label': `Bookings per day over the last ${daily.length} days` });
+  const grad = s('linearGradient', { id, x1: 0, y1: 0, x2: 0, y2: 1 });
+  grad.append(s('stop', { offset: '0%', 'stop-color': '#005efc', 'stop-opacity': 0.18 }), s('stop', { offset: '100%', 'stop-color': '#005efc', 'stop-opacity': 0 }));
+  const defs = s('defs');
+  defs.append(grad);
+  root.append(defs);
+  for (let k = 0; k <= Math.round(max / yStep); k++) {
+    const v = yStep * k;
+    root.append(s('line', { class: 'gl', x1: L, x2: W - R, y1: y(v), y2: y(v) }), s('text', { class: 'ax', x: L - 8, y: y(v) + 4, 'text-anchor': 'end' }, int(v)));
+  }
+  const step = Math.max(1, Math.round(daily.length / Math.max(2, Math.floor(W / 110))));
+  daily.forEach((d, i) => { if (i % step === 0 || i === daily.length - 1) root.append(s('text', { class: 'ax', x: x(i), y: H - 8, 'text-anchor': i === 0 ? 'start' : i === daily.length - 1 ? 'end' : 'middle' }, plainDate(d.date, { day: 'numeric', month: 'short' }))); });
+  const pts = vals.map((v, i) => [x(i), y(v)]);
+  const line = monotonePath(pts);
+  root.append(s('path', { d: `${line} L${x(vals.length - 1)},${y(0)} L${x(0)},${y(0)} Z`, fill: `url(#${id})` }), s('path', { class: 'line', d: line }));
+  // the busiest day, labelled directly
+  const pi = vals.indexOf(Math.max(...vals));
+  if (vals[pi] > 0) {
+    const label = `${int(vals[pi])} bookings`;
+    const tw = label.length * 6.6 + 18;
+    const tx = Math.min(Math.max(x(pi), L + tw / 2), W - R - tw / 2), ty = Math.max(4, y(vals[pi]) - 34);
+    root.append(s('rect', { class: 'peak-tag', x: tx - tw / 2, y: ty, width: tw, height: 22, rx: 11 }), s('text', { class: 'peak-text', x: tx, y: ty + 15, 'text-anchor': 'middle' }, label),
+      s('circle', { class: 'peak', cx: x(pi), cy: y(vals[pi]), r: 5 }));
+  }
+  const cross = s('line', { class: 'cross', x1: 0, x2: 0, y1: T, y2: H - B });
+  const pt = s('circle', { class: 'pt', r: 5, cx: 0, cy: 0 });
+  const hit = s('rect', { x: L, y: 0, width: W - L - R, height: H, fill: 'transparent' });
+  root.append(cross, pt, hit);
+
+  const box = h('div', { class: 'chart', tabindex: '0', 'aria-label': 'Bookings per day chart. Use the left and right arrow keys to read each day.' }, root);
+  const tip = h('div', { class: 'chart-tip', hidden: true });
+  box.append(tip, srTable('Bookings per day', ['Day', 'Bookings', 'Booked value'], daily.map((d) => [plainDate(d.date, { weekday: 'short', day: 'numeric', month: 'short' }), int(d.bookings), money(d.revenue)])));
+  let idx = vals.length - 1;
+  const show = (i) => {
+    idx = Math.max(0, Math.min(vals.length - 1, i));
+    const d = daily[idx];
+    cross.setAttribute('x1', x(idx)); cross.setAttribute('x2', x(idx));
+    pt.setAttribute('cx', x(idx)); pt.setAttribute('cy', y(vals[idx]));
+    tip.replaceChildren(h('b', { text: plainDate(d.date, { weekday: 'short', day: 'numeric', month: 'short' }) }), `${int(d.bookings)} bookings`, h('br'), `${money(d.revenue)} booked value`);
+    const r = root.getBoundingClientRect(), bx = box.getBoundingClientRect();
+    tip.style.left = `${(x(idx) / W) * r.width + (r.left - bx.left)}px`;
+    tip.style.top = `${(y(vals[idx]) / H) * r.height + (r.top - bx.top)}px`;
+    tip.hidden = false; box.classList.add('is-hover');
+  };
+  const hide = () => { tip.hidden = true; box.classList.remove('is-hover'); };
+  hit.addEventListener('pointermove', (e) => { const r = root.getBoundingClientRect(); const px = ((e.clientX - r.left) / r.width) * W; show(Math.round(((px - L) / (W - L - R)) * (vals.length - 1))); });
+  hit.addEventListener('pointerleave', hide);
+  box.addEventListener('focus', () => show(idx));
+  box.addEventListener('blur', hide);
+  box.addEventListener('keydown', (e) => { if (e.key === 'ArrowLeft') { e.preventDefault(); show(idx - 1); } if (e.key === 'ArrowRight') { e.preventDefault(); show(idx + 1); } });
+  return box;
+}
+
+/** Revenue per month, stacked by how the booking came in. */
+function revenueChart(monthly, W = 640) {
+  const H = 240, L = 48, R = 8, T = 12, B = 28, GAP = 2;
+  const totals = monthly.map((m) => SERIES.reduce((t, [k]) => t + (Number(m[k]) || 0), 0));
+  const top = Math.max(...totals, 0);
+  if (!monthly.length) return h('p', { class: 'muted', text: 'No takings yet.' });
+  const { step: yStep, max } = niceScale(Math.max(top, 1), top < 100);
+  const y = (v) => T + (1 - v / max) * (H - T - B);
+  const band = (W - L - R) / monthly.length, bw = Math.min(46, band * 0.5);
+  const root = s('svg', { viewBox: `0 0 ${W} ${H}`, class: 'chart-svg', role: 'group', 'aria-label': 'Takings per month by how bookings came in' });
+  for (let k = 0; k <= Math.round(max / yStep); k++) {
+    const v = yStep * k;
+    root.append(s('line', { class: 'gl', x1: L, x2: W - R, y1: y(v), y2: y(v) }), s('text', { class: 'ax', x: L - 8, y: y(v) + 4, 'text-anchor': 'end' }, v >= 1000 ? `£${(v / 1000).toFixed(v % 1000 ? 1 : 0)}k` : `£${int(v)}`));
+  }
+  const box = h('div', { class: 'chart' });
+  const tip = h('div', { class: 'chart-tip', hidden: true });
+  monthly.forEach((m, i) => {
+    const cx = L + band * i + band / 2;
+    const name = plainDate(`${m.month}-01`, { month: 'short' });
+    root.append(s('text', { class: 'ax', x: cx, y: H - 8, 'text-anchor': 'middle' }, name));
+    let acc = 0;
+    const segs = SERIES.filter(([k]) => Number(m[k]) > 0);
+    segs.forEach(([k], j) => {
+      const v = Number(m[k]);
+      const top = y(acc + v), bottom = y(acc);
+      const hgt = Math.max(0, bottom - top - (j > 0 ? GAP : 0));
+      if (hgt > 0) root.append(s('rect', { class: `s-${k}`, x: cx - bw / 2, y: top, width: bw, height: hgt, rx: j === segs.length - 1 ? 4 : 1.5 }));
+      acc += v;
+    });
+    const hitR = s('rect', { class: 'bar-hit', x: L + band * i, y: T, width: band, height: H - T - B, tabindex: 0, role: 'img',
+      'aria-label': `${plainDate(`${m.month}-01`, { month: 'long', year: 'numeric' })}: ${money(totals[i])} in total. ${SERIES.map(([k, lab]) => `${lab} ${money(m[k])}`).join(', ')}` });
+    const show = () => {
+      tip.replaceChildren(h('b', { text: plainDate(`${m.month}-01`, { month: 'long', year: 'numeric' }) }), `${money(totals[i])} in total`,
+        ...SERIES.map(([k, lab]) => h('div', {}, h('i', { class: `s-${k}` }), `${lab} ${money(m[k])}`)));
+      const r = root.getBoundingClientRect(), bx = box.getBoundingClientRect();
+      tip.style.left = `${(cx / W) * r.width + (r.left - bx.left)}px`;
+      tip.style.top = `${(y(totals[i]) / H) * r.height + (r.top - bx.top)}px`;
+      tip.hidden = false;
+    };
+    hitR.addEventListener('pointerenter', show); hitR.addEventListener('focus', show);
+    hitR.addEventListener('pointerleave', () => { tip.hidden = true; }); hitR.addEventListener('blur', () => { tip.hidden = true; });
+    root.append(hitR);
+  });
+  box.append(root, tip, srTable('Revenue per month', ['Month', ...SERIES.map(([, l]) => l), 'Total'],
+    monthly.map((m, i) => [plainDate(`${m.month}-01`, { month: 'long', year: 'numeric' }), ...SERIES.map(([k]) => money(m[k])), money(totals[i])])));
+  return box;
+}
+
+/** Draws a chart at the panel's real width (so text stays at its true size) and redraws when the panel resizes. */
+function fitChart(build) {
+  const host = h('div', { class: 'chart-host' });
+  let last = 0;
+  const draw = (w) => { const width = Math.max(300, Math.round(w)); if (Math.abs(width - last) < 8) return; last = width; host.replaceChildren(build(width)); };
+  if ('ResizeObserver' in window) new ResizeObserver((entries) => draw(entries[0].contentRect.width)).observe(host);
+  requestAnimationFrame(() => draw(host.clientWidth || 640));
+  return host;
+}
+
+/* ---------- upcoming rail ---------- */
+function renderRail(list, staffNames) {
+  const staffIdx = new Map((staffNames || []).map((n, i) => [n, i]));
+  const today = isoDay();
+  const days = Array.from({ length: 7 }, (_, i) => shiftDay(today, i));
+  if (!state.railDay || !days.includes(state.railDay)) state.railDay = today;
+  const byDay = (ds) => list.filter((b) => isoDay(new Date(b.starts_at)) === ds);
+  const items = h('ul', { class: 'appts', role: 'list' });
+  const month = h('span', { class: 'rail-month' });
+  const week = h('div', { class: 'week', role: 'group', 'aria-label': 'Choose a day' });
+  const draw = () => {
+    month.textContent = plainDate(state.railDay, { month: 'long', year: 'numeric' });
+    for (const b of week.children) b.setAttribute('aria-pressed', String(b.dataset.day === state.railDay));
+    const rows = byDay(state.railDay);
+    items.replaceChildren(...(rows.length ? rows.map((b) => {
+      const i = staffIdx.has(b.staff) ? staffIdx.get(b.staff) : -1;
+      return h('li', {},
+        h('button', { type: 'button', class: 'appt', onClick: () => openBooking(b, b.staff) },
+          h('span', { class: `avatar ${toneOf(i)}`, 'aria-hidden': 'true', text: initials(b.customer) }),
+          h('span', { class: 'who' }, h('b', { text: b.customer }), h('span', { text: b.service }), h('small', { text: `${time(b.starts_at)} with ${b.staff}` })),
+          h('span', { class: 'price', text: b.price ? money(b.price) : '' })));
+    }) : [h('li', { class: 'rail-empty', text: state.railDay === today ? 'No more appointments today.' : 'No appointments booked yet.' })]));
+  };
+  days.forEach((ds) => {
+    const n = byDay(ds).length;
+    week.append(h('button', { type: 'button', dataset: { day: ds }, 'aria-label': `${plainDate(ds, { weekday: 'long', day: 'numeric', month: 'long' })}, ${n} appointments`,
+      onClick: () => { state.railDay = ds; draw(); } },
+      plainDate(ds, { weekday: 'short' }), h('b', { text: plainDate(ds, { day: 'numeric' }) })));
+  });
+  draw();
+  return h('aside', { class: 'rail', 'aria-label': 'Upcoming appointments' },
+    h('div', { class: 'rail-head' }, h('h2', { text: 'Upcoming' }), month), week, items);
+}
+
+/* ---------- views ---------- */
+function deskEmpty() {
+  view.replaceChildren(empty('No business to show yet', 'Once a client\'s booking system is set up, their diary, calls and takings appear here.'));
+}
+
+async function renderOverview(current) {
+  if (!state.client) return deskEmpty();
+  const seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Period' },
+    [[7, '7 days'], [30, '30 days'], [90, '90 days']].map(([d, t]) => h('button', { type: 'button', 'aria-pressed': String(d === state.deskDays), text: t,
+      onClick: () => { state.deskDays = d; route(); } })));
+  tools.append(seg);
+  loading(3);
+  const cid = state.client.id;
+  const [ov, dy, up] = await Promise.all([src.overview(cid, state.deskDays), src.day(cid, null), src.upcoming(cid, null, 7)]);
+  if (!current()) return;
+  state.receptionist = ov?.business?.receptionist_name || 'Sophie';
+  const k = ov.kpis || {};
+  const period = `${ov.days} days`;
+  const kcards = h('section', { class: 'kcards', 'aria-label': `The last ${period}` },
+    kcard('k-navy', ICON.calendar, 'Bookings', int(k.bookings), delta(k.bookings, k.bookings_prev), period),
+    kcard('k-blue', ICON.spark, `Booked by ${state.receptionist}`, int(k.by_ai), k.bookings ? `${Math.round((k.by_ai / k.bookings) * 100)}% of all` : null, period),
+    kcard('k-teal', ICON.pound, 'Takings', money(k.revenue), delta(k.revenue, k.revenue_prev), period),
+    kcard('k-brass', ICON.phone, 'Calls answered', int(k.calls), delta(k.calls, k.calls_prev), period));
+
+  const diary = h('section', { class: 'panel' },
+    h('div', { class: 'panel-head' }, h('div', { class: 'panel-head-col' }, h('h2', { text: 'Today\'s diary' }),
+      h('span', { class: 'panel-sub', text: dy.closed ? 'Closed today' : `${dy.bookings.length} appointments, ${dy.opens.replace(/^0/, '')} to ${dy.closes.replace(/^0/, '')}` })),
+      h('a', { class: 'text-link', href: `${DEMO ? location.search : ''}#calendar`, text: 'Open calendar' })),
+    renderDiary(dy, { compact: true }));
+
+  const statsPanel = h('section', { class: 'panel' },
+    h('div', { class: 'panel-head' }, h('div', { class: 'panel-head-col' }, h('h2', { text: 'Bookings' }), h('span', { class: 'panel-sub', text: `New bookings each day, last ${period}` }))),
+    h('div', { class: 'panel-body' }, fitChart((w) => bookingsChart(ov.daily || [], w))));
+  const revPanel = h('section', { class: 'panel' },
+    h('div', { class: 'panel-head' }, h('div', { class: 'panel-head-col' }, h('h2', { text: 'Takings by month' }), h('span', { class: 'panel-sub', text: 'Completed appointments, by how they were booked' }))),
+    h('div', { class: 'panel-body' },
+      h('div', { class: 'legend', 'aria-hidden': 'true' }, SERIES.map(([key, lab]) => h('span', {}, h('i', { class: `s-${key}` }), lab))),
+      fitChart((w) => revenueChart(ov.monthly || [], w))));
+
+  view.replaceChildren(h('div', { class: 'fd' },
+    h('div', { class: 'fd-main' }, kcards, h('div', { class: 'fd-row' }, statsPanel, revPanel), diary),
+    renderRail(up.bookings || [], dy.staff.map((x) => x.name))));
+}
+
+async function renderCalendar(current) {
+  if (!state.client) return deskEmpty();
+  const today = isoDay();
+  if (!state.calDate) state.calDate = today;
+  const label = h('span', { class: 'pager-label', 'aria-live': 'polite' });
+  const go = (n) => { state.calDate = n === 0 ? today : shiftDay(state.calDate, n); route(); };
+  tools.append(h('div', { class: 'pager' },
+    h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Previous day', onClick: () => go(-1) }, svg(ICON.left)),
+    label,
+    h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Next day', onClick: () => go(1) }, svg(ICON.right))),
+  h('button', { class: 'btn btn-sm btn-quiet', type: 'button', text: 'Today', disabled: state.calDate === today, onClick: () => go(0) }));
+  label.textContent = plainDate(state.calDate, { weekday: 'long', day: 'numeric', month: 'long' });
+  loading(1);
+  const dy = await src.day(state.client.id, state.calDate);
+  if (!current()) return;
+  const value = dy.bookings.reduce((t, b) => t + (Number(b.price) || 0), 0);
+  view.replaceChildren(h('section', { class: 'panel' },
+    h('div', { class: 'panel-head' }, h('div', { class: 'panel-head-col' },
+      h('h2', { text: state.calDate === today ? 'Today' : plainDate(state.calDate, { weekday: 'long' }) }),
+      h('span', { class: 'panel-sub', text: dy.closed ? 'Closed' : `${dy.bookings.length} appointments, ${money(value)} booked, open ${dy.opens.replace(/^0/, '')} to ${dy.closes.replace(/^0/, '')}` }))),
+    renderDiary(dy)));
+}
+
+async function renderActivity(current) {
+  if (!state.client) return deskEmpty();
+  loading(2);
+  const a = await src.activity(state.client.id);
+  if (!current()) return;
+  const dur = (sec) => { const n = Number(sec) || 0; return n >= 60 ? `${Math.floor(n / 60)} min ${n % 60 ? `${n % 60} s` : ''}`.trim() : `${n} s`; };
+  const calls = h('section', { class: 'panel' },
+    h('div', { class: 'panel-head' }, h('h2', { text: 'Calls' }), h('span', { class: 'muted', text: `${a.calls.length} most recent` })),
+    h('div', { class: 'panel-body' }, a.calls.length ? h('ul', { class: 'calls', role: 'list' }, a.calls.map((c) => h('li', { class: 'call' },
+      h('span', { class: `avatar ${c.channel === 'web' ? 't2' : 't1'}`, 'aria-hidden': 'true' }, svg(c.channel === 'web' ? ICON.web : ICON.phone)),
+      h('div', {}, h('b', { text: c.customer }), h('p', { text: c.summary || 'No summary for this call.' })),
+      h('small', {}, ago(c.started_at), h('br'), c.channel === 'web' ? `Website, ${dur(c.duration_s)}` : `Phone, ${dur(c.duration_s)}`))))
+      : h('p', { class: 'muted', text: 'No calls yet. Calls answered by your receptionist appear here with a short summary.' })));
+  const texts = h('section', { class: 'panel' },
+    h('div', { class: 'panel-head' }, h('h2', { text: 'Texts' }), h('span', { class: 'muted', text: 'Newest first' })),
+    h('div', { class: 'panel-body' }, a.texts.length ? h('ul', { class: 'texts', role: 'list' }, a.texts.map((m) => h('li', { class: `bubble ${m.direction === 'in' ? 'in' : 'out'}` },
+      m.body, h('small', { text: `${m.direction === 'in' ? m.customer : `To ${m.customer}`}, ${ago(m.at)}` }))))
+      : h('p', { class: 'muted', text: 'No texts yet. Confirmations, reminders and replies appear here.' })));
+  view.replaceChildren(h('div', { class: 'act' }, calls, texts));
+}
+
 /* ------------------------------------------------------------------ boot */
 
 function notLinked(email) {
@@ -702,8 +1152,16 @@ function notLinked(email) {
   $('.js-view-sub').textContent = '';
   view.setAttribute('aria-busy', 'false');
   view.replaceChildren(empty('Your account isn\'t linked to a business yet',
-    `You're signed in as ${email || 'this account'}, but it hasn't been added to a SimplyBooked organisation. Ask the account owner to add you, then sign in again.`,
+    `You're signed in as ${email || 'this account'}, but it hasn't been given access to a business or a SimplyBooked organisation yet. Ask the person who set up your account to add you, then sign in again.`,
     h('button', { class: 'btn btn-quiet', type: 'button', text: 'Sign out', onClick: async () => { await signOut(); location.replace('/login.html'); } })));
+}
+
+const CLIENT_KEY = 'simplybooked.client';
+function chooseClient(id) {
+  state.client = state.clients.find((c) => c.id === id) || state.clients[0] || null;
+  state.clientTz = state.client?.timezone || 'Europe/London';
+  try { if (state.client) localStorage.setItem(CLIENT_KEY, state.client.id); } catch { /* ignore */ }
+  state.calDate = null; state.railDay = null;
 }
 
 async function boot() {
@@ -714,10 +1172,11 @@ async function boot() {
   const signout = $('.js-signout');
   if (DEMO) {
     $('.js-demo-bar').hidden = false;
+    if (DEMO_SALES) $('.js-demo-text').textContent = 'You\'re exploring the demo with sample businesses. Nothing you do here is saved or sent.';
     signout.textContent = 'Leave demo';
     signout.addEventListener('click', () => location.assign('/'));
     // keep demo mode across navigation
-    for (const a of document.querySelectorAll('.side-nav a')) a.href = `?demo=1${a.getAttribute('href')}`;
+    for (const a of document.querySelectorAll('.side-nav a')) a.href = `${location.pathname}${location.search}${a.getAttribute('href')}`;
   } else {
     signout.addEventListener('click', async () => { await signOut(); location.replace('/login.html'); });
   }
@@ -729,23 +1188,47 @@ async function boot() {
   }
 
   try {
-    const me = await src.me(session?.user?.id);
-    state.profile = me.profile;
-    state.org = me.org;
-    if (!DEMO && (!me.profile || !me.org)) { notLinked(session?.user?.email); return; }
+    if (DEMO) {
+      state.canDesk = true;
+      state.canGrowth = DEMO_SALES;
+      state.clients = await src.portalClients();
+      if (DEMO_SALES) { const me = await src.me(); state.profile = me.profile; state.org = me.org; }
+    } else {
+      const [me, clients] = await Promise.all([src.me(session.user?.id), src.portalClients().catch((e) => { if (e?.code === 'unauthenticated') throw e; return []; })]);
+      state.profile = me.profile; state.org = me.org;
+      state.clients = clients;
+      state.canGrowth = !!(me.profile && me.org);
+      state.canDesk = clients.length > 0;
+      if (!state.canGrowth && !state.canDesk) { notLinked(session.user?.email); return; }
+    }
   } catch (e) {
     if (e?.code === 'unauthenticated') { location.replace('/login.html'); return; }
     document.body.classList.remove('is-loading');
     failed(e, () => location.reload());
     return;
   }
-  if (state.org?.timezone) TZ = state.org.timezone;
-  $('.js-org').textContent = state.org?.name || '';
-  $('.js-user').textContent = state.profile?.email || session?.user?.email || '';
+
+  let saved = null;
+  try { saved = localStorage.getItem(CLIENT_KEY); } catch { saved = null; }
+  chooseClient(saved);
+  $('.js-group-desk').hidden = !state.canDesk;
+  $('.js-group-growth').hidden = !state.canGrowth;
+  if (state.clients.length > 1) {
+    const picker = $('.js-business-picker');
+    picker.replaceChildren(...state.clients.map((c) => h('option', { value: c.id, text: c.business_name, selected: c.id === state.client?.id })));
+    picker.addEventListener('change', () => { chooseClient(picker.value); route(); });
+    $('.js-business').hidden = false;
+  }
+
+  state.orgTz = state.org?.timezone || BROWSER_TZ;
+  const who = state.profile?.full_name || state.profile?.email || session?.user?.email || (DEMO ? 'Leo' : '');
+  $('.js-org').textContent = state.canGrowth ? (state.org?.name || '') : (state.client?.business_name || '');
+  $('.js-user').textContent = DEMO && !DEMO_SALES ? 'Owner' : (state.profile?.email || session?.user?.email || '');
+  $('.js-me-avatar').textContent = initials(who);
   document.body.classList.remove('is-loading');
 
   window.addEventListener('hashchange', route);
-  loadMetrics().catch(() => {}); // sidebar counts
+  if (state.canGrowth) loadMetrics().catch(() => {}); // sidebar counts
   route();
 }
 
