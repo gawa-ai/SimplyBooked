@@ -28,9 +28,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "select bos.concierge_gate($1, $2, $3, $4::boolean) as g;",
+        "query": "select bos.concierge_gate($1, $2, $3, $4::boolean, $5::int) as g;",
         "options": {
-          "queryReplacement": "={{ [ $json.body.business ?? '', $json.headers['x-concierge-ip'] ?? '', String($json.body.message ?? '').slice(0, 700), Number($json.body.turn) === 1 ] }}",
+          "queryReplacement": "={{ [ $json.body.business ?? '', $json.headers['x-concierge-ip'] ?? '', String($json.body.message ?? '').slice(0, 700), Number($json.body.turn) === 1, Number($json.body.turn) || 1 ] }}",
           "queryBatching": "independently"
         }
       },
@@ -188,9 +188,9 @@
         "descriptionType": "manual",
         "toolDescription": "Check open appointment times for a service on a date. Always use before offering or booking a time.",
         "operation": "executeQuery",
-        "query": "select bos.dispatch($1, 'check_availability', $2::jsonb, $3, 'website', $4::jsonb)::text as result;",
+        "query": "select bos.dispatch_web($1, 'check_availability', $2::jsonb, $3, $4::jsonb)::text as result;",
         "options": {
-          "queryReplacement": "={{ [ $('Concierge Webhook').item.json.body.business, { service: $fromAI('service', 'Service name as listed under SERVICES', 'string'), date: $fromAI('date', 'Date as YYYY-MM-DD in the business timezone', 'string'), time: $fromAI('time', 'Preferred time as HH:MM (24h), or empty to list openings that day', 'string', '') }, String($('Concierge Webhook').item.json.body.session || 'anon').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) + ':check_availability', '{}' ] }}"
+          "queryReplacement": "={{ [ $('Concierge Webhook').item.json.body.business, { service: $fromAI('service', 'Service name as listed under SERVICES', 'string'), date: $fromAI('date', 'Date as YYYY-MM-DD in the business timezone', 'string'), time: $fromAI('time', 'Preferred time as HH:MM (24h), or empty to list openings that day', 'string', '') }, String($('Concierge Webhook').item.json.body.session || 'anon').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) + ':check_availability', { ip: $('Concierge Webhook').item.json.headers['x-concierge-ip'] ?? '' } ] }}"
         }
       },
       "id": "c0a795cf-458d-5e98-bfe5-403d712bd7cf",
@@ -213,9 +213,9 @@
         "descriptionType": "manual",
         "toolDescription": "Book an appointment after the visitor agreed to a free time shown by check_availability and gave name and mobile number.",
         "operation": "executeQuery",
-        "query": "select bos.dispatch($1, 'book', $2::jsonb, $3, 'website', $4::jsonb)::text as result;",
+        "query": "select bos.dispatch_web($1, 'book', $2::jsonb, $3, $4::jsonb)::text as result;",
         "options": {
-          "queryReplacement": "={{ [ $('Concierge Webhook').item.json.body.business, { customer_name: $fromAI('customer_name', 'Visitor full name', 'string'), phone: $fromAI('phone', 'Visitor mobile number', 'string'), service: $fromAI('service', 'Service name as listed under SERVICES', 'string'), date: $fromAI('date', 'Date as YYYY-MM-DD', 'string'), time: $fromAI('time', 'Time as HH:MM (24h)', 'string'), notes: $fromAI('notes', 'Optional short note for the team, or empty', 'string', '') }, String($('Concierge Webhook').item.json.body.session || 'anon').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) + ':book', '{}' ] }}"
+          "queryReplacement": "={{ [ $('Concierge Webhook').item.json.body.business, { customer_name: $fromAI('customer_name', 'Visitor full name', 'string'), phone: $fromAI('phone', 'Visitor mobile number', 'string'), service: $fromAI('service', 'Service name as listed under SERVICES', 'string'), date: $fromAI('date', 'Date as YYYY-MM-DD', 'string'), time: $fromAI('time', 'Time as HH:MM (24h)', 'string'), notes: $fromAI('notes', 'Optional short note for the team, or empty', 'string', '') }, String($('Concierge Webhook').item.json.body.session || 'anon').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) + ':book', { ip: $('Concierge Webhook').item.json.headers['x-concierge-ip'] ?? '' } ] }}"
         }
       },
       "id": "f46a91f0-7b40-57c9-839c-49d117f0d63f",
@@ -238,9 +238,9 @@
         "descriptionType": "manual",
         "toolDescription": "Look up a visitor's booking. Needs the booking reference and the first name on it.",
         "operation": "executeQuery",
-        "query": "select bos.dispatch($1, 'find', $2::jsonb, $3, 'website', $4::jsonb)::text as result;",
+        "query": "select bos.dispatch_web($1, 'find', $2::jsonb, $3, $4::jsonb)::text as result;",
         "options": {
-          "queryReplacement": "={{ [ $('Concierge Webhook').item.json.body.business, { ref: $fromAI('ref', 'Booking reference', 'string', ''), customer_name: $fromAI('customer_name', 'First name on the booking', 'string', ''), phone: $fromAI('phone', 'Phone number on the booking, if no reference', 'string', '') }, String($('Concierge Webhook').item.json.body.session || 'anon').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) + ':find', '{}' ] }}"
+          "queryReplacement": "={{ [ $('Concierge Webhook').item.json.body.business, { ref: $fromAI('ref', 'Booking reference', 'string', ''), customer_name: $fromAI('customer_name', 'First name on the booking', 'string', ''), phone: $fromAI('phone', 'Phone number on the booking, if no reference', 'string', '') }, String($('Concierge Webhook').item.json.body.session || 'anon').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) + ':find', { ip: $('Concierge Webhook').item.json.headers['x-concierge-ip'] ?? '' } ] }}"
         }
       },
       "id": "a923698b-8b05-5d41-8a23-ac054de953b9",
@@ -263,9 +263,9 @@
         "descriptionType": "manual",
         "toolDescription": "Move a booking to a new date and time. Needs reference and first name. Check availability first.",
         "operation": "executeQuery",
-        "query": "select bos.dispatch($1, 'reschedule', $2::jsonb, $3, 'website', $4::jsonb)::text as result;",
+        "query": "select bos.dispatch_web($1, 'reschedule', $2::jsonb, $3, $4::jsonb)::text as result;",
         "options": {
-          "queryReplacement": "={{ [ $('Concierge Webhook').item.json.body.business, { ref: $fromAI('ref', 'Booking reference', 'string', ''), customer_name: $fromAI('customer_name', 'First name on the booking', 'string', ''), phone: $fromAI('phone', 'Phone number on the booking, if no reference', 'string', ''), date: $fromAI('date', 'New date as YYYY-MM-DD', 'string'), time: $fromAI('time', 'New time as HH:MM (24h)', 'string') }, String($('Concierge Webhook').item.json.body.session || 'anon').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) + ':reschedule', '{}' ] }}"
+          "queryReplacement": "={{ [ $('Concierge Webhook').item.json.body.business, { ref: $fromAI('ref', 'Booking reference', 'string', ''), customer_name: $fromAI('customer_name', 'First name on the booking', 'string', ''), phone: $fromAI('phone', 'Phone number on the booking, if no reference', 'string', ''), date: $fromAI('date', 'New date as YYYY-MM-DD', 'string'), time: $fromAI('time', 'New time as HH:MM (24h)', 'string') }, String($('Concierge Webhook').item.json.body.session || 'anon').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) + ':reschedule', { ip: $('Concierge Webhook').item.json.headers['x-concierge-ip'] ?? '' } ] }}"
         }
       },
       "id": "9c9b48b3-a120-5138-9dde-62b5eeca40fd",
@@ -288,9 +288,9 @@
         "descriptionType": "manual",
         "toolDescription": "Cancel a booking. Needs reference and first name, and only when the visitor clearly asked to cancel.",
         "operation": "executeQuery",
-        "query": "select bos.dispatch($1, 'cancel', $2::jsonb, $3, 'website', $4::jsonb)::text as result;",
+        "query": "select bos.dispatch_web($1, 'cancel', $2::jsonb, $3, $4::jsonb)::text as result;",
         "options": {
-          "queryReplacement": "={{ [ $('Concierge Webhook').item.json.body.business, { ref: $fromAI('ref', 'Booking reference', 'string', ''), customer_name: $fromAI('customer_name', 'First name on the booking', 'string', ''), phone: $fromAI('phone', 'Phone number on the booking, if no reference', 'string', ''), reason: $fromAI('reason', 'Short reason if given, else empty', 'string', '') }, String($('Concierge Webhook').item.json.body.session || 'anon').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) + ':cancel', '{}' ] }}"
+          "queryReplacement": "={{ [ $('Concierge Webhook').item.json.body.business, { ref: $fromAI('ref', 'Booking reference', 'string', ''), customer_name: $fromAI('customer_name', 'First name on the booking', 'string', ''), phone: $fromAI('phone', 'Phone number on the booking, if no reference', 'string', ''), reason: $fromAI('reason', 'Short reason if given, else empty', 'string', '') }, String($('Concierge Webhook').item.json.body.session || 'anon').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) + ':cancel', { ip: $('Concierge Webhook').item.json.headers['x-concierge-ip'] ?? '' } ] }}"
         }
       },
       "id": "0a14b03a-321e-5bfd-894a-48198ac8861d",
@@ -311,7 +311,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const g = $('Gate').item.json.g;\nconst body = $('Concierge Webhook').item.json.body || {};\nconst direct = g.allowed !== true || g.cached === true;\nlet reply = direct ? String(g.reply || '') : (typeof $json.output === 'string' ? $json.output.trim() : '');\nconst gotAnswer = !direct && !!reply;\nif (!reply) reply = 'Sorry, I had trouble with that. Please try again in a moment.';\nif (reply.length > 700) reply = reply.slice(0, 697) + '...';\n// Only static FAQ-style answers are cached: first turn, nothing about bookings, dates or the visitor.\nconst bookingish = /\\b(book|booking|cancel|resched|move|change|available|availability|slot|appointment|tomorrow|today|tonight|next|monday|tuesday|wednesday|thursday|friday|saturday|sunday|ref|reference|my name|i am|i'm)\\b/i;\nconst cacheable = gotAnswer && Number(body.turn) === 1 && !bookingish.test(String(body.message || ''));\nreturn { json: { reply, cached: g.cached === true, business_id: g.business_id || '', message: String(body.message || ''), cacheable } };\n"
+        "jsCode": "const g = $('Gate').item.json.g;\nconst body = $('Concierge Webhook').item.json.body || {};\nconst direct = g.allowed !== true || g.cached === true;\nlet reply = direct ? String(g.reply || '') : (typeof $json.output === 'string' ? $json.output.trim() : '');\nconst gotAnswer = !direct && !!reply;\nif (!reply) reply = 'Sorry, I had trouble with that. Please try again in a moment.';\nif (reply.length > 700) reply = reply.slice(0, 697) + '...';\n// Only static FAQ-style answers are cached: first turn, nothing about bookings, dates or the visitor.\nconst bookingish = /\\b(book|booking|cancel|resched|move|change|available|availability|slot|appointment|tomorrow|today|tonight|next|monday|tuesday|wednesday|thursday|friday|saturday|sunday|ref|reference|my name|i am|i'm)\\b/i;\nconst cacheable = gotAnswer && Number(body.turn) === 1 && !bookingish.test(String(body.message || ''));\nconst m = reply.match(/\\b(?:reference|ref)\\b(?:\\s+(?:is|number))?[\\s:#-]{0,3}([A-HJ-NP-Z2-9]{6})\\b/i);\nconst ref = (!direct && m) ? m[1].toUpperCase() : '';\nreturn { json: { reply, cached: g.cached === true, business_id: g.business_id || '', message: String(body.message || ''), cacheable, ref } };\n"
       },
       "id": "7892fdb9-1050-57c9-b179-e31394f4f683",
       "name": "Build Reply",
@@ -325,9 +325,33 @@
     {
       "parameters": {
         "operation": "executeQuery",
+        "query": "select bos.sms_preview(nullif($1, '')::uuid, $2) as p;",
+        "options": {
+          "queryReplacement": "={{ [ $json.business_id, $json.ref ] }}",
+          "queryBatching": "independently"
+        }
+      },
+      "id": "0f59a20a-b303-517d-8967-24d259acf23d",
+      "name": "Preview",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1100,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
         "query": "select bos.concierge_store(nullif($1, '')::uuid, $2, $3, $4::boolean) as r;",
         "options": {
-          "queryReplacement": "={{ [ $json.business_id, $json.message, $json.reply, $json.cacheable ] }}",
+          "queryReplacement": "={{ [ $('Build Reply').item.json.business_id, $('Build Reply').item.json.message, $('Build Reply').item.json.reply, $('Build Reply').item.json.cacheable ] }}",
           "queryBatching": "independently"
         }
       },
@@ -336,7 +360,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        1220,
+        1300,
         100
       ],
       "credentials": {
@@ -349,7 +373,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ reply: $('Build Reply').item.json.reply, cached: $('Build Reply').item.json.cached }) }}",
+        "responseBody": "={{ JSON.stringify({ reply: $('Build Reply').item.json.reply, cached: $('Build Reply').item.json.cached, preview: $('Preview').item.json.p ?? null }) }}",
         "options": {}
       },
       "id": "26017ca1-1102-5ff9-9b72-773812f9ee4e",
@@ -357,7 +381,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        1460,
+        1500,
         100
       ]
     },
@@ -477,6 +501,17 @@
       ]
     },
     "Build Reply": {
+      "main": [
+        [
+          {
+            "node": "Preview",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preview": {
       "main": [
         [
           {

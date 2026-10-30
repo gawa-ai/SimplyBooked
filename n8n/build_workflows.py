@@ -349,21 +349,23 @@ if (reply.length > 700) reply = reply.slice(0, 697) + '...';
 // Only static FAQ-style answers are cached: first turn, nothing about bookings, dates or the visitor.
 const bookingish = /\b(book|booking|cancel|resched|move|change|available|availability|slot|appointment|tomorrow|today|tonight|next|monday|tuesday|wednesday|thursday|friday|saturday|sunday|ref|reference|my name|i am|i'm)\b/i;
 const cacheable = gotAnswer && Number(body.turn) === 1 && !bookingish.test(String(body.message || ''));
-return { json: { reply, cached: g.cached === true, business_id: g.business_id || '', message: String(body.message || ''), cacheable } };
+const m = reply.match(/\b(?:reference|ref)\b(?:\s+(?:is|number))?[\s:#-]{0,3}([A-HJ-NP-Z2-9]{6})\b/i);
+const ref = (!direct && m) ? m[1].toUpperCase() : '';
+return { json: { reply, cached: g.cached === true, business_id: g.business_id || '', message: String(body.message || ''), cacheable, ref } };
 """
 def ctool(tool, fields):
     obj = ", ".join(f"{k}: $fromAI('{k}', '{d}', 'string'{', ' + repr(dflt) if dflt is not None else ''})"
                     for k, d, dflt in fields)
     return (f"={{{{ [ {W}.body.business, {{ {obj} }}, "
-            f"String({W}.body.session || 'anon').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) + ':{tool}', '{{}}' ] }}}}")
-CTOOL_SQL = "select bos.dispatch($1, '{tool}', $2::jsonb, $3, 'website', $4::jsonb)::text as result;"
+            f"String({W}.body.session || 'anon').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) + ':{tool}', {{ ip: {W}.headers['x-concierge-ip'] ?? '' }} ] }}}}")
+CTOOL_SQL = "select bos.dispatch_web($1, '{tool}', $2::jsonb, $3, $4::jsonb)::text as result;"
 SESSION_KEY = (f"={{{{ String({W}.body.business || 'x') + ':' + "
                f"String({W}.body.session || 'anon').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) }}}}")
 
 concierge = workflow("BOS · Web Concierge (demo site chat)", [
     webhook(WC, "Concierge Webhook", [0, 100], "bos/concierge", "headerAuth", CRED["api"]),
-    pg_query(WC, "Gate", [230, 100], "select bos.concierge_gate($1, $2, $3, $4::boolean) as g;",
-             "={{ [ $json.body.business ?? '', $json.headers['x-concierge-ip'] ?? '', String($json.body.message ?? '').slice(0, 700), Number($json.body.turn) === 1 ] }}"),
+    pg_query(WC, "Gate", [230, 100], "select bos.concierge_gate($1, $2, $3, $4::boolean, $5::int) as g;",
+             "={{ [ $json.body.business ?? '', $json.headers['x-concierge-ip'] ?? '', String($json.body.message ?? '').slice(0, 700), Number($json.body.turn) === 1, Number($json.body.turn) || 1 ] }}"),
     node(WC, "Route", "n8n-nodes-base.switch", 3.2, [460, 100],
          switch_rules([("direct", "={{ ($json.g.allowed !== true || $json.g.cached === true) ? 'direct' : 'agent' }}", "direct"),
                        ("agent", "={{ ($json.g.allowed !== true || $json.g.cached === true) ? 'direct' : 'agent' }}", "agent")])),
@@ -415,12 +417,14 @@ concierge = workflow("BOS · Web Concierge (demo site chat)", [
                  ("reason", "Short reason if given, else empty", "")]),
              tool_desc="Cancel a booking. Needs reference and first name, and only when the visitor clearly asked to cancel."),
     node(WC, "Build Reply", "n8n-nodes-base.code", 2, [980, 100], {"mode": "runOnceForEachItem", "jsCode": CBUILD_JS}),
-    pg_query(WC, "Store Cache", [1220, 100],
+    pg_query(WC, "Preview", [1100, 100], "select bos.sms_preview(nullif($1, '')::uuid, $2) as p;",
+             "={{ [ $json.business_id, $json.ref ] }}"),
+    pg_query(WC, "Store Cache", [1300, 100],
              "select bos.concierge_store(nullif($1, '')::uuid, $2, $3, $4::boolean) as r;",
-             "={{ [ $json.business_id, $json.message, $json.reply, $json.cacheable ] }}"),
-    node(WC, "Respond Chat", "n8n-nodes-base.respondToWebhook", 1.1, [1460, 100], {
+             "={{ [ $('Build Reply').item.json.business_id, $('Build Reply').item.json.message, $('Build Reply').item.json.reply, $('Build Reply').item.json.cacheable ] }}"),
+    node(WC, "Respond Chat", "n8n-nodes-base.respondToWebhook", 1.1, [1500, 100], {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ reply: $('Build Reply').item.json.reply, cached: $('Build Reply').item.json.cached }) }}",
+        "responseBody": "={{ JSON.stringify({ reply: $('Build Reply').item.json.reply, cached: $('Build Reply').item.json.cached, preview: $('Preview').item.json.p ?? null }) }}",
         "options": {}}),
     webhook(WC, "Businesses Webhook", [0, 700], "bos/concierge-businesses", "headerAuth", CRED["api"]),
     pg_query(WC, "List Businesses", [230, 700], "select bos.concierge_businesses() as list;"),
@@ -428,7 +432,7 @@ concierge = workflow("BOS · Web Concierge (demo site chat)", [
         "respondWith": "json", "responseBody": "={{ JSON.stringify($json.list) }}", "options": {}}),
 ], conn(("Concierge Webhook", "Gate"), ("Gate", "Route"),
         ("Route", "Build Reply", 0), ("Route", "Concierge Agent", 1),
-        ("Concierge Agent", "Build Reply"), ("Build Reply", "Store Cache"), ("Store Cache", "Respond Chat"),
+        ("Concierge Agent", "Build Reply"), ("Build Reply", "Preview"), ("Preview", "Store Cache"), ("Store Cache", "Respond Chat"),
         ("OpenAI Model", "Concierge Agent", 0, "ai_languageModel"),
         ("Chat Memory", "Concierge Agent", 0, "ai_memory"),
         ("check_availability", "Concierge Agent", 0, "ai_tool"),

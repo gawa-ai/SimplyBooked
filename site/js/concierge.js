@@ -57,19 +57,29 @@ async function send(text) {
   const typing = add('', 'bot'); const dots = $('span', 'cc-typing'); dots.append($('i'), $('i'), $('i')); typing.appendChild(dots);
   turn += 1;
   let reply = 'Sorry, something went wrong. Please try again.';
+  let preview = null;
   try {
     const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 40000);
     const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ctl.signal,
       body: JSON.stringify({ business: biz.slug, session, message: text, turn }) });
     clearTimeout(to);
     if (r.status === 429) reply = 'You are going a little fast. Please wait a moment and try again.';
-    else if (r.ok) { const j = await r.json(); if (j && j.reply) reply = String(j.reply); }
+    else if (r.ok) { const j = await r.json(); if (j && j.reply) reply = String(j.reply); if (j && j.preview) preview = j.preview; }
   } catch (e) { reply = 'I could not reach the system just now. Please try again.'; }
   typing.textContent = reply;
+  if (preview) addPreview(preview);
   el.log.scrollTop = el.log.scrollHeight;
   busy = false; el.send.disabled = false;
   await say(reply);
   if (voiceMode) startListening(); else el.input.focus();
+}
+
+function addPreview(p) {
+  const card = $('div', 'cc-preview');
+  card.appendChild($('div', 'cc-pv-h', 'Sample only: nothing is actually sent in this demo'));
+  if (p.sms) { const t = $('div', 'cc-pv-sms'); t.appendChild($('b', '', 'Text to customer')); t.appendChild($('span', '', String(p.sms))); card.appendChild(t); }
+  if (p.calendar) { const c = $('div', 'cc-pv-cal'); c.appendChild($('b', '', 'Google Calendar')); c.appendChild($('span', '', String(p.calendar.title) + ' · ' + String(p.calendar.when))); card.appendChild(c); }
+  el.log.appendChild(card); el.log.scrollTop = el.log.scrollHeight;
 }
 
 function pick(b) {
