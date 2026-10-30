@@ -332,11 +332,122 @@ errors = workflow("BOS · Error Handler", [
              "{ execution_id: $json.execution?.id ?? null, url: $json.execution?.url ?? null, workflow_id: $json.workflow?.id ?? null } ] }}"),
 ], conn(("On Workflow Error", "Log Error")))
 
+
+# ---------------------------------------------------------------------------------------------
+# 5. WEB CONCIERGE — demo website chat/voice receptionist (OpenAI only, no Twilio/Vapi)
+# ---------------------------------------------------------------------------------------------
+WC = "concierge"
+W = "$('Concierge Webhook').item.json"
+G = "$('Gate').item.json.g"
+CBUILD_JS = r"""const g = $('Gate').item.json.g;
+const body = $('Concierge Webhook').item.json.body || {};
+const direct = g.allowed !== true || g.cached === true;
+let reply = direct ? String(g.reply || '') : (typeof $json.output === 'string' ? $json.output.trim() : '');
+const gotAnswer = !direct && !!reply;
+if (!reply) reply = 'Sorry, I had trouble with that. Please try again in a moment.';
+if (reply.length > 700) reply = reply.slice(0, 697) + '...';
+// Only static FAQ-style answers are cached: first turn, nothing about bookings, dates or the visitor.
+const bookingish = /\b(book|booking|cancel|resched|move|change|available|availability|slot|appointment|tomorrow|today|tonight|next|monday|tuesday|wednesday|thursday|friday|saturday|sunday|ref|reference|my name|i am|i'm)\b/i;
+const cacheable = gotAnswer && Number(body.turn) === 1 && !bookingish.test(String(body.message || ''));
+return { json: { reply, cached: g.cached === true, business_id: g.business_id || '', message: String(body.message || ''), cacheable } };
+"""
+def ctool(tool, fields):
+    obj = ", ".join(f"{k}: $fromAI('{k}', '{d}', 'string'{', ' + repr(dflt) if dflt is not None else ''})"
+                    for k, d, dflt in fields)
+    return (f"={{{{ [ {W}.body.business, {{ {obj} }}, "
+            f"String({W}.body.session || 'anon').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) + ':{tool}', '{{}}' ] }}}}")
+CTOOL_SQL = "select bos.dispatch($1, '{tool}', $2::jsonb, $3, 'website', $4::jsonb)::text as result;"
+SESSION_KEY = (f"={{{{ String({W}.body.business || 'x') + ':' + "
+               f"String({W}.body.session || 'anon').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) }}}}")
+
+concierge = workflow("BOS · Web Concierge (demo site chat)", [
+    webhook(WC, "Concierge Webhook", [0, 100], "bos/concierge", "headerAuth", CRED["api"]),
+    pg_query(WC, "Gate", [230, 100], "select bos.concierge_gate($1, $2, $3, $4::boolean) as g;",
+             "={{ [ $json.body.business ?? '', $json.headers['x-concierge-ip'] ?? '', String($json.body.message ?? '').slice(0, 700), Number($json.body.turn) === 1 ] }}"),
+    node(WC, "Route", "n8n-nodes-base.switch", 3.2, [460, 100],
+         switch_rules([("direct", "={{ ($json.g.allowed !== true || $json.g.cached === true) ? 'direct' : 'agent' }}", "direct"),
+                       ("agent", "={{ ($json.g.allowed !== true || $json.g.cached === true) ? 'direct' : 'agent' }}", "agent")])),
+    node(WC, "Concierge Agent", "@n8n/n8n-nodes-langchain.agent", 2.2, [720, 240], {
+        "promptType": "define",
+        "text": f"={{{{ String({W}.body.message || '').slice(0, 700) }}}}",
+        "options": {"systemMessage": "={{ $json.g.system_prompt }}", "maxIterations": 6}},
+        onError="continueRegularOutput"),
+    node(WC, "OpenAI Model", "@n8n/n8n-nodes-langchain.lmChatOpenAi", 1.2, [560, 480], {
+        "model": {"__rl": True, "mode": "list", "value": "gpt-4.1-mini", "cachedResultName": "gpt-4.1-mini"},
+        "options": {"maxTokens": 220, "temperature": 0.3}}, CRED["openai"]),
+    node(WC, "Chat Memory", "@n8n/n8n-nodes-langchain.memoryPostgresChat", 1.3, [700, 480], {
+        "sessionIdType": "customKey", "sessionKey": SESSION_KEY,
+        "tableName": "bos_chat_histories", "contextWindowLength": 10}, CRED["postgres"]),
+    pg_query(WC, "check_availability", [840, 480], CTOOL_SQL.format(tool="check_availability"),
+             ctool("check_availability", [
+                 ("service", "Service name as listed under SERVICES", None),
+                 ("date", "Date as YYYY-MM-DD in the business timezone", None),
+                 ("time", "Preferred time as HH:MM (24h), or empty to list openings that day", "")]),
+             tool_desc="Check open appointment times for a service on a date. Always use before offering or booking a time."),
+    pg_query(WC, "book_appointment", [980, 480], CTOOL_SQL.format(tool="book"),
+             ctool("book", [
+                 ("customer_name", "Visitor full name", None),
+                 ("phone", "Visitor mobile number", None),
+                 ("service", "Service name as listed under SERVICES", None),
+                 ("date", "Date as YYYY-MM-DD", None),
+                 ("time", "Time as HH:MM (24h)", None),
+                 ("notes", "Optional short note for the team, or empty", "")]),
+             tool_desc="Book an appointment after the visitor agreed to a free time shown by check_availability and gave name and mobile number."),
+    pg_query(WC, "find_appointment", [1120, 480], CTOOL_SQL.format(tool="find"),
+             ctool("find", [
+                 ("ref", "Booking reference", ""),
+                 ("customer_name", "First name on the booking", ""),
+                 ("phone", "Phone number on the booking, if no reference", "")]),
+             tool_desc="Look up a visitor's booking. Needs the booking reference and the first name on it."),
+    pg_query(WC, "reschedule_appointment", [1260, 480], CTOOL_SQL.format(tool="reschedule"),
+             ctool("reschedule", [
+                 ("ref", "Booking reference", ""),
+                 ("customer_name", "First name on the booking", ""),
+                 ("phone", "Phone number on the booking, if no reference", ""),
+                 ("date", "New date as YYYY-MM-DD", None),
+                 ("time", "New time as HH:MM (24h)", None)]),
+             tool_desc="Move a booking to a new date and time. Needs reference and first name. Check availability first."),
+    pg_query(WC, "cancel_appointment", [1400, 480], CTOOL_SQL.format(tool="cancel"),
+             ctool("cancel", [
+                 ("ref", "Booking reference", ""),
+                 ("customer_name", "First name on the booking", ""),
+                 ("phone", "Phone number on the booking, if no reference", ""),
+                 ("reason", "Short reason if given, else empty", "")]),
+             tool_desc="Cancel a booking. Needs reference and first name, and only when the visitor clearly asked to cancel."),
+    node(WC, "Build Reply", "n8n-nodes-base.code", 2, [980, 100], {"mode": "runOnceForEachItem", "jsCode": CBUILD_JS}),
+    pg_query(WC, "Store Cache", [1220, 100],
+             "select bos.concierge_store(nullif($1, '')::uuid, $2, $3, $4::boolean) as r;",
+             "={{ [ $json.business_id, $json.message, $json.reply, $json.cacheable ] }}"),
+    node(WC, "Respond Chat", "n8n-nodes-base.respondToWebhook", 1.1, [1460, 100], {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ reply: $('Build Reply').item.json.reply, cached: $('Build Reply').item.json.cached }) }}",
+        "options": {}}),
+    webhook(WC, "Businesses Webhook", [0, 700], "bos/concierge-businesses", "headerAuth", CRED["api"]),
+    pg_query(WC, "List Businesses", [230, 700], "select bos.concierge_businesses() as list;"),
+    node(WC, "Respond List", "n8n-nodes-base.respondToWebhook", 1.1, [460, 700], {
+        "respondWith": "json", "responseBody": "={{ JSON.stringify($json.list) }}", "options": {}}),
+], conn(("Concierge Webhook", "Gate"), ("Gate", "Route"),
+        ("Route", "Build Reply", 0), ("Route", "Concierge Agent", 1),
+        ("Concierge Agent", "Build Reply"), ("Build Reply", "Store Cache"), ("Store Cache", "Respond Chat"),
+        ("OpenAI Model", "Concierge Agent", 0, "ai_languageModel"),
+        ("Chat Memory", "Concierge Agent", 0, "ai_memory"),
+        ("check_availability", "Concierge Agent", 0, "ai_tool"),
+        ("book_appointment", "Concierge Agent", 0, "ai_tool"),
+        ("find_appointment", "Concierge Agent", 0, "ai_tool"),
+        ("reschedule_appointment", "Concierge Agent", 0, "ai_tool"),
+        ("cancel_appointment", "Concierge Agent", 0, "ai_tool"),
+        ("Businesses Webhook", "List Businesses"), ("List Businesses", "Respond List")))
+# the businesses endpoint is a GET
+for n_ in concierge["nodes"]:
+    if n_["name"] == "Businesses Webhook":
+        n_["parameters"]["httpMethod"] = "GET"
+
 FILES = {
     "01-BOS-Gateway.json": gateway,
     "02-BOS-Worker.json": worker,
     "03-BOS-SMS-Agent.json": sms,
     "04-BOS-Error-Handler.json": errors,
+    "05-BOS-Web-Concierge.json": concierge,
 }
 for fname, wf in FILES.items():
     (OUT / fname).write_text(json.dumps(wf, indent=2, ensure_ascii=False) + "\n")

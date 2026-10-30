@@ -1,0 +1,613 @@
+{
+  "name": "BOS · Web Concierge (demo site chat)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "bos/concierge",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "fd947a24-0161-5d01-9922-0c6c72af3154",
+      "name": "Concierge Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        100
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_api_secret",
+          "name": "BOS API Secret"
+        }
+      },
+      "webhookId": "6cbc3f7c-b49e-5226-8d21-85ef29fffec1"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select bos.concierge_gate($1, $2, $3, $4::boolean) as g;",
+        "options": {
+          "queryReplacement": "={{ [ $json.body.business ?? '', $json.headers['x-concierge-ip'] ?? '', String($json.body.message ?? '').slice(0, 700), Number($json.body.turn) === 1 ] }}",
+          "queryBatching": "independently"
+        }
+      },
+      "id": "0fd66bad-3df1-575f-8e88-bcdeb592bbea",
+      "name": "Gate",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        230,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "4b013664-a972-53a0-90f1-fe70153cc91e",
+                    "leftValue": "={{ ($json.g.allowed !== true || $json.g.cached === true) ? 'direct' : 'agent' }}",
+                    "rightValue": "direct",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "direct"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "9af7116a-7199-53d3-99a3-b7e7ec27c080",
+                    "leftValue": "={{ ($json.g.allowed !== true || $json.g.cached === true) ? 'direct' : 'agent' }}",
+                    "rightValue": "agent",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "agent"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ba8db2ea-1768-5c5c-ad74-a155d598a715",
+      "name": "Route",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        460,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ String($('Concierge Webhook').item.json.body.message || '').slice(0, 700) }}",
+        "options": {
+          "systemMessage": "={{ $json.g.system_prompt }}",
+          "maxIterations": 6
+        }
+      },
+      "id": "aa218c3b-374d-5d74-b814-16f63cba4060",
+      "name": "Concierge Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        720,
+        240
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "options": {
+          "maxTokens": 220,
+          "temperature": 0.3
+        }
+      },
+      "id": "c71dedd2-da34-540c-9583-595746be05af",
+      "name": "OpenAI Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        560,
+        480
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "REPLACE_openai",
+          "name": "BOS OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ String($('Concierge Webhook').item.json.body.business || 'x') + ':' + String($('Concierge Webhook').item.json.body.session || 'anon').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) }}",
+        "tableName": "bos_chat_histories",
+        "contextWindowLength": 10
+      },
+      "id": "92469609-7c1b-514a-9687-8fc116dcd4ba",
+      "name": "Chat Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        700,
+        480
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Check open appointment times for a service on a date. Always use before offering or booking a time.",
+        "operation": "executeQuery",
+        "query": "select bos.dispatch($1, 'check_availability', $2::jsonb, $3, 'website', $4::jsonb)::text as result;",
+        "options": {
+          "queryReplacement": "={{ [ $('Concierge Webhook').item.json.body.business, { service: $fromAI('service', 'Service name as listed under SERVICES', 'string'), date: $fromAI('date', 'Date as YYYY-MM-DD in the business timezone', 'string'), time: $fromAI('time', 'Preferred time as HH:MM (24h), or empty to list openings that day', 'string', '') }, String($('Concierge Webhook').item.json.body.session || 'anon').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) + ':check_availability', '{}' ] }}"
+        }
+      },
+      "id": "c0a795cf-458d-5e98-bfe5-403d712bd7cf",
+      "name": "check_availability",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.5,
+      "position": [
+        840,
+        480
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Book an appointment after the visitor agreed to a free time shown by check_availability and gave name and mobile number.",
+        "operation": "executeQuery",
+        "query": "select bos.dispatch($1, 'book', $2::jsonb, $3, 'website', $4::jsonb)::text as result;",
+        "options": {
+          "queryReplacement": "={{ [ $('Concierge Webhook').item.json.body.business, { customer_name: $fromAI('customer_name', 'Visitor full name', 'string'), phone: $fromAI('phone', 'Visitor mobile number', 'string'), service: $fromAI('service', 'Service name as listed under SERVICES', 'string'), date: $fromAI('date', 'Date as YYYY-MM-DD', 'string'), time: $fromAI('time', 'Time as HH:MM (24h)', 'string'), notes: $fromAI('notes', 'Optional short note for the team, or empty', 'string', '') }, String($('Concierge Webhook').item.json.body.session || 'anon').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) + ':book', '{}' ] }}"
+        }
+      },
+      "id": "f46a91f0-7b40-57c9-839c-49d117f0d63f",
+      "name": "book_appointment",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.5,
+      "position": [
+        980,
+        480
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Look up a visitor's booking. Needs the booking reference and the first name on it.",
+        "operation": "executeQuery",
+        "query": "select bos.dispatch($1, 'find', $2::jsonb, $3, 'website', $4::jsonb)::text as result;",
+        "options": {
+          "queryReplacement": "={{ [ $('Concierge Webhook').item.json.body.business, { ref: $fromAI('ref', 'Booking reference', 'string', ''), customer_name: $fromAI('customer_name', 'First name on the booking', 'string', ''), phone: $fromAI('phone', 'Phone number on the booking, if no reference', 'string', '') }, String($('Concierge Webhook').item.json.body.session || 'anon').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) + ':find', '{}' ] }}"
+        }
+      },
+      "id": "a923698b-8b05-5d41-8a23-ac054de953b9",
+      "name": "find_appointment",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.5,
+      "position": [
+        1120,
+        480
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Move a booking to a new date and time. Needs reference and first name. Check availability first.",
+        "operation": "executeQuery",
+        "query": "select bos.dispatch($1, 'reschedule', $2::jsonb, $3, 'website', $4::jsonb)::text as result;",
+        "options": {
+          "queryReplacement": "={{ [ $('Concierge Webhook').item.json.body.business, { ref: $fromAI('ref', 'Booking reference', 'string', ''), customer_name: $fromAI('customer_name', 'First name on the booking', 'string', ''), phone: $fromAI('phone', 'Phone number on the booking, if no reference', 'string', ''), date: $fromAI('date', 'New date as YYYY-MM-DD', 'string'), time: $fromAI('time', 'New time as HH:MM (24h)', 'string') }, String($('Concierge Webhook').item.json.body.session || 'anon').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) + ':reschedule', '{}' ] }}"
+        }
+      },
+      "id": "9c9b48b3-a120-5138-9dde-62b5eeca40fd",
+      "name": "reschedule_appointment",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.5,
+      "position": [
+        1260,
+        480
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Cancel a booking. Needs reference and first name, and only when the visitor clearly asked to cancel.",
+        "operation": "executeQuery",
+        "query": "select bos.dispatch($1, 'cancel', $2::jsonb, $3, 'website', $4::jsonb)::text as result;",
+        "options": {
+          "queryReplacement": "={{ [ $('Concierge Webhook').item.json.body.business, { ref: $fromAI('ref', 'Booking reference', 'string', ''), customer_name: $fromAI('customer_name', 'First name on the booking', 'string', ''), phone: $fromAI('phone', 'Phone number on the booking, if no reference', 'string', ''), reason: $fromAI('reason', 'Short reason if given, else empty', 'string', '') }, String($('Concierge Webhook').item.json.body.session || 'anon').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) + ':cancel', '{}' ] }}"
+        }
+      },
+      "id": "0a14b03a-321e-5bfd-894a-48198ac8861d",
+      "name": "cancel_appointment",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.5,
+      "position": [
+        1400,
+        480
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const g = $('Gate').item.json.g;\nconst body = $('Concierge Webhook').item.json.body || {};\nconst direct = g.allowed !== true || g.cached === true;\nlet reply = direct ? String(g.reply || '') : (typeof $json.output === 'string' ? $json.output.trim() : '');\nconst gotAnswer = !direct && !!reply;\nif (!reply) reply = 'Sorry, I had trouble with that. Please try again in a moment.';\nif (reply.length > 700) reply = reply.slice(0, 697) + '...';\n// Only static FAQ-style answers are cached: first turn, nothing about bookings, dates or the visitor.\nconst bookingish = /\\b(book|booking|cancel|resched|move|change|available|availability|slot|appointment|tomorrow|today|tonight|next|monday|tuesday|wednesday|thursday|friday|saturday|sunday|ref|reference|my name|i am|i'm)\\b/i;\nconst cacheable = gotAnswer && Number(body.turn) === 1 && !bookingish.test(String(body.message || ''));\nreturn { json: { reply, cached: g.cached === true, business_id: g.business_id || '', message: String(body.message || ''), cacheable } };\n"
+      },
+      "id": "7892fdb9-1050-57c9-b179-e31394f4f683",
+      "name": "Build Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        980,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select bos.concierge_store(nullif($1, '')::uuid, $2, $3, $4::boolean) as r;",
+        "options": {
+          "queryReplacement": "={{ [ $json.business_id, $json.message, $json.reply, $json.cacheable ] }}",
+          "queryBatching": "independently"
+        }
+      },
+      "id": "613e3be4-0202-58ad-9940-8ff8ab016cbe",
+      "name": "Store Cache",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1220,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ reply: $('Build Reply').item.json.reply, cached: $('Build Reply').item.json.cached }) }}",
+        "options": {}
+      },
+      "id": "26017ca1-1102-5ff9-9b72-773812f9ee4e",
+      "name": "Respond Chat",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1460,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "bos/concierge-businesses",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "2b66c8a7-d97e-5c97-b223-01fbff66b0c2",
+      "name": "Businesses Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        700
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_api_secret",
+          "name": "BOS API Secret"
+        }
+      },
+      "webhookId": "a1f64064-e9b9-5175-a0e6-0fc60a77c985"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select bos.concierge_businesses() as list;",
+        "options": {
+          "queryBatching": "independently"
+        }
+      },
+      "id": "34b378e4-618b-5750-96d6-51f9abbbca89",
+      "name": "List Businesses",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        230,
+        700
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_postgres",
+          "name": "BOS Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.list) }}",
+        "options": {}
+      },
+      "id": "a81d3e2c-b3ce-5519-b512-0f152ca8faf9",
+      "name": "Respond List",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        460,
+        700
+      ]
+    }
+  ],
+  "connections": {
+    "Concierge Webhook": {
+      "main": [
+        [
+          {
+            "node": "Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate": {
+      "main": [
+        [
+          {
+            "node": "Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route": {
+      "main": [
+        [
+          {
+            "node": "Build Reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Concierge Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Concierge Agent": {
+      "main": [
+        [
+          {
+            "node": "Build Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Reply": {
+      "main": [
+        [
+          {
+            "node": "Store Cache",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Cache": {
+      "main": [
+        [
+          {
+            "node": "Respond Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Concierge Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Concierge Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check_availability": {
+      "ai_tool": [
+        [
+          {
+            "node": "Concierge Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "book_appointment": {
+      "ai_tool": [
+        [
+          {
+            "node": "Concierge Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "find_appointment": {
+      "ai_tool": [
+        [
+          {
+            "node": "Concierge Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "reschedule_appointment": {
+      "ai_tool": [
+        [
+          {
+            "node": "Concierge Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "cancel_appointment": {
+      "ai_tool": [
+        [
+          {
+            "node": "Concierge Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Businesses Webhook": {
+      "main": [
+        [
+          {
+            "node": "List Businesses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Businesses": {
+      "main": [
+        [
+          {
+            "node": "Respond List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
